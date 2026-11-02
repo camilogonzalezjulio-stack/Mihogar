@@ -32,16 +32,32 @@ Copia `.env.example` a `.env` y llena los valores de tu app web de Firebase
    | sofia             | `sofia@mihogar.test`  |
    Para agregar más personas, créalas igual y añade su correo en `firestore.rules`.
 
-## Publicar
+## Publicar (Vercel)
+
+La app está en **https://mihogar-six.vercel.app** (proyecto `boff2/mihogar`, ya vinculado en `.vercel/`).
+
+```bash
+npm run deploy
+```
+
+Compila y publica en producción. Vercel no recibe el `.env` (ver `.vercelignore`): las variables `VITE_*`
+se cargan una vez en el proyecto de Vercel:
+
+```bash
+vercel env add VITE_FIREBASE_API_KEY production
+```
+
+(repetir por cada variable de `.env.example`, luego `npm run deploy`). También se pueden poner en
+Vercel → Project → Settings → Environment Variables.
+
+Las reglas de Firestore se publican aparte, con Firebase CLI:
 
 ```bash
 npm install -g firebase-tools
 firebase login
 firebase use --add
-npm run deploy
+npm run deploy:rules
 ```
-
-`npm run deploy` compila a `dist/` y sube Hosting + reglas. La app queda en `https://TU_PROYECTO.web.app`.
 
 ## Recordatorios de servicios sin pagar (Telegram y Discord)
 

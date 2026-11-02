@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#6d55f5">
+  <title>MiHogar</title>
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-title" content="MiHogar">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#" data-brand>
+      <img src="/logo.svg" alt="" width="38" height="38">
+      <span><b>MiHogar</b><small>Casa y finanzas</small></span>
+    </a>
+    <nav id="nav">
+      <button data-view="resumen">
+        <svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zm0 7h6v-5H4zm10 0h6v-9h-6zm0-16v5h6V4z"/></svg><span>Resumen</span></button>
+      <button data-view="servicios">
+        <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Servicios</span></button>
+      <button data-view="compras">
+        <svg viewBox="0 0 24 24"><path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4m10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4M3 3h2.3l2.6 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L22 7H6.2"/></svg><span>Compras</span></button>
+      <button data-view="finanzas">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h13v4M3 7v10a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2m14 7h.01"/></svg><span>Finanzas</span></button>
+    </nav>
+    <div class="top-right">
+      <span id="who"></span>
+      <div class="backup">
+        <button class="ghost sm" id="btn-export" title="Descargar copia de seguridad">⬇ Respaldo</button>
+        <button class="ghost sm" id="btn-import" title="Restaurar copia">⬆ Restaurar</button>
+        <input type="file" id="file-import" accept="application/json" hidden>
+      </div>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <dialog id="dlg">
+    <form method="dialog" id="dlg-form"></form>
+  </dialog>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

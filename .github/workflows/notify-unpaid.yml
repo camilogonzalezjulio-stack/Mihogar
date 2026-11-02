@@ -1,0 +1,34 @@
+name: Recordatorio de servicios sin pagar
+
+on:
+  schedule:
+    # Todos los días: el script decide si hay algo que avisar (mes actual desde el 25, mora después del 3).
+    # GitHub usa hora UTC; Colombia es UTC-5.
+    - cron: '0 14 * * *'   # 9:00 am Colombia
+    - cron: '0 21 * * *'   # 4:00 pm Colombia
+    - cron: '0 2 * * *'    # 9:00 pm Colombia (02:00 UTC del día siguiente)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Incluir el mes actual aunque no sea día 25 o posterior (prueba)'
+        type: boolean
+        default: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node scripts/notify-unpaid.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          APP_URL: ${{ vars.APP_URL }}
+          NOTIFY_FORCE: ${{ inputs.force && '1' || '0' }}

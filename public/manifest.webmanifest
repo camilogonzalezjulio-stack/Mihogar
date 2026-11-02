@@ -1,0 +1,16 @@
+{
+  "name": "MiHogar",
+  "short_name": "MiHogar",
+  "description": "Gastos, compras y finanzas de la casa",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f4fb",
+  "theme_color": "#6d55f5",
+  "lang": "es",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/logo.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

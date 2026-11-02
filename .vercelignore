@@ -1,0 +1,10 @@
+# La configuración va en las variables de entorno del proyecto en Vercel, no en archivos subidos.
+.env
+.env.*
+!.env.example
+*-firebase-adminsdk-*.json
+service-account*.json
+node_modules
+dist
+.firebase
+.claude

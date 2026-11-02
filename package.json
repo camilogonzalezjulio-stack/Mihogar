@@ -1,0 +1,21 @@
+{
+  "name": "mihogar",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vercel deploy --prod",
+    "notify": "node --env-file-if-exists=.env scripts/notify-unpaid.mjs",
+    "deploy:rules": "firebase deploy --only firestore:rules"
+  },
+  "dependencies": {
+    "firebase": "^10.14.1"
+  },
+  "devDependencies": {
+    "firebase-admin": "^12.7.0",
+    "vite": "^5.4.11"
+  }
+}

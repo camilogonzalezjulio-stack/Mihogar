@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Solo estos usuarios (creados en Authentication) pueden entrar.
+    function permitido() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'camilo@mihogar.test',
+          'sofia@mihogar.test'
+        ];
+    }
+
+    // Datos compartidos de la casa: servicios, recibos y compras.
+    match /homes/main/data/{doc} {
+      allow read, write: if permitido() && doc in ['services', 'bills', 'shopping'];
+    }
+    match /homes/main/receipts/{doc} {
+      allow read, write: if permitido();
+    }
+
+    // Finanzas personales: solo el dueño de la cuenta puede leerlas o escribirlas.
+    match /homes/main/private/{userId}/data/{doc} {
+      allow read, write: if permitido() && request.auth.uid == userId && doc in ['people', 'tx'];
+    }
+  }
+}

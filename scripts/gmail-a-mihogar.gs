@@ -39,7 +39,7 @@ function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   // Cada 5 minutos: casi inmediato y dentro del límite diario gratis de Apps Script (~90 min de ejecución).
   ScriptApp.newTrigger('revisarCorreo').timeBased().everyMinutes(5).create();
-  revisarCorreo();
+  reintentarRevisar(); // también vuelve a intentar los que quedaron en "MiHogar/revisar"
 }
 
 function revisarCorreo() {

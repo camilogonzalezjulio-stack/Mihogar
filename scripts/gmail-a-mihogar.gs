@@ -69,7 +69,7 @@ function revisarCorreo() {
         payload: JSON.stringify({
           provider: empresa.id,
           amount: valor,
-          month: periodo(vence || Utilities.formatDate(msg.getDate(), 'America/Bogota', 'yyyy-MM-dd')),
+          month: leerPeriodo(texto, msg.getDate()) || periodo(vence || Utilities.formatDate(msg.getDate(), 'America/Bogota', 'yyyy-MM-dd')),
           due: vence || undefined,
           messageId: msg.getId(),
         }),
@@ -108,8 +108,23 @@ function reintentarRevisar() {
 }
 
 /**
- * Mes al que corresponde la factura ("YYYY-MM"): el anterior a la fecha límite, o si no la trae, el anterior
- * al día en que llegó el correo. La factura de octubre llega y se paga en noviembre.
+ * Mes facturado si la factura lo dice ("Periodo facturado Octubre-2026", "factura correspondiente al mes de
+ * Octubre") → "YYYY-MM", o '' si no. Sin año, se toma el del correo (o el anterior si ese mes aún no llega).
+ */
+function leerPeriodo(texto, fechaCorreo) {
+  const m = texto.match(/periodo\s+facturado[^A-Za-zÁÉÍÓÚáéíóú]{0,20}([a-záéíóú]+)[\s\-\/]+(\d{4})/i)
+    || texto.match(/(?:correspondiente\s+al\s+mes\s+de|factura\s+del\s+mes\s+de)\s+([a-záéíóú]+)(?:\s+(?:de\s+)?(\d{4}))?/i);
+  const mes = m && MESES[m[1].toLowerCase()];
+  if (!mes) return '';
+  const yCorreo = Number(Utilities.formatDate(fechaCorreo, 'America/Bogota', 'yyyy'));
+  const mCorreo = Number(Utilities.formatDate(fechaCorreo, 'America/Bogota', 'M'));
+  const y = m[2] ? Number(m[2]) : (mes > mCorreo ? yCorreo - 1 : yCorreo);
+  return `${y}-${String(mes).padStart(2, '0')}`;
+}
+
+/**
+ * Mes al que corresponde la factura ("YYYY-MM") cuando no lo dice: el anterior a la fecha límite, o si no la
+ * trae, el anterior al día en que llegó el correo. La factura de octubre llega y se paga en noviembre.
  */
 function periodo(fechaISO) {
   const [y, m] = fechaISO.split('-').map(Number);
@@ -119,6 +134,7 @@ function periodo(fechaISO) {
 /** "$ 85.430" / "85.430,00" / "$85,430" → 85430. Devuelve 0 si no encuentra un valor a pagar. */
 function leerValor(texto) {
   const patrones = [
+    /total\s+factura\s+a\s+pagar[^\d$]{0,40}\$?\s*([\d][\d.,]*)/i, // Triple A: antes que su "cupo disponible"
     /(?:total\s+a\s+pagar|valor\s+a\s+pagar|total\s+factura|valor\s+total|monto\s+a\s+pagar|saldo\s+a\s+pagar|pago\s+total)[^\d$]{0,40}\$?\s*([\d][\d.,]*)/i,
     /\$\s*([\d]{1,3}(?:[.,]\d{3})+(?:[.,]\d{2})?)/,
   ];
@@ -148,8 +164,14 @@ function leerVencimiento(texto) {
   if (m) return armarFecha(m[1], m[2], m[3]);
   m = texto.match(new RegExp(pre + '(\\d{1,2})\\s+de\\s+([a-záéíóú]+)(?:\\s+de(?:l)?)?\\s+(\\d{4})', 'i'));
   if (m && MESES[m[2].toLowerCase()]) return armarFecha(m[3], MESES[m[2].toLowerCase()], m[1]);
+  // "Fecha de vencimiento Oct 20-26" (mes abreviado, día y año de 2 dígitos)
+  // Solo mes de 3 letras: así no se confunde con la fecha de emisión ("Octubre 7-26") cuando el PDF las separa.
+  m = texto.match(/(?:fecha\s+de\s+vencimiento|vence|pague\s+hasta)[^A-Za-z\d]{0,25}([a-z]{3})\.?\s+(\d{1,2})[\-\/\s]+(\d{2,4})/i);
+  if (m && MES_CORTO[m[1].toLowerCase()]) return armarFecha(m[3], MES_CORTO[m[1].toLowerCase()], m[2]);
   return '';
 }
+
+const MES_CORTO = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
 
 function armarFecha(y, mo, d) {
   y = Number(y); if (y < 100) y += 2000;

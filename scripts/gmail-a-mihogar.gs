@@ -7,7 +7,7 @@
  *  2. Borra lo que trae y pega TODO este archivo. Guarda (Ctrl+S).
  *  3. En la barra elige la función `instalar` y dale ▶ Ejecutar. Acepta los permisos.
  *  No lleva claves: la app reconoce tu cuenta de Google (solo las cuentas permitidas en api/ingest-bill.js).
- *  Desde ahí revisa el correo cada hora. Para probar sin esperar, ejecuta `revisarCorreo`.
+ *  Desde ahí revisa el correo cada 5 minutos. Para probar sin esperar, ejecuta `revisarCorreo`.
  *  Lo que no pueda leer queda con la etiqueta "MiHogar/revisar"; lo registrado, con "MiHogar/registrado".
  */
 const CONFIG = {
@@ -28,7 +28,8 @@ const ETIQUETA_REVISAR = 'MiHogar/revisar';
 
 function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('revisarCorreo').timeBased().everyHours(1).create();
+  // Cada 5 minutos: casi inmediato y dentro del límite diario gratis de Apps Script (~90 min de ejecución).
+  ScriptApp.newTrigger('revisarCorreo').timeBased().everyMinutes(5).create();
   revisarCorreo();
 }
 

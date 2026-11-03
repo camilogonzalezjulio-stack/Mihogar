@@ -86,7 +86,7 @@ usando un archivo descargado con el botón "Respaldo" de la app.
 
 ## Facturas automáticas desde Gmail
 
-`scripts/gmail-a-mihogar.gs` es un Google Apps Script que corre gratis en tu cuenta de Gmail cada hora: busca
+`scripts/gmail-a-mihogar.gs` es un Google Apps Script que corre gratis en tu cuenta de Gmail cada 5 minutos: busca
 correos de **Air-e, Gases del Caribe, Triple A y Claro**, lee el valor a pagar (y la fecha límite si aparece) y lo
 envía a `api/ingest-bill.js`, que lo registra como **pendiente** en Luz, Gas, Agua o Internet del mes en que llegó
 el correo. Si ese recibo ya está marcado como pagado no lo toca; si ya existe y está pendiente, actualiza el valor.

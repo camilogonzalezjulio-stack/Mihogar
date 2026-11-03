@@ -4,14 +4,14 @@
  *
  * Instalación (una sola vez):
  *  1. Entra a https://script.google.com con la cuenta de Gmail donde llegan las facturas → Nuevo proyecto.
- *  2. Borra lo que trae y pega TODO este archivo. Arriba, en CONFIG.secret, pega el valor de CRON_SECRET.
- *  3. Guarda (Ctrl+S). En la barra elige la función `instalar` y dale ▶ Ejecutar. Acepta los permisos de Gmail.
+ *  2. Borra lo que trae y pega TODO este archivo. Guarda (Ctrl+S).
+ *  3. En la barra elige la función `instalar` y dale ▶ Ejecutar. Acepta los permisos.
+ *  No lleva claves: la app reconoce tu cuenta de Google (solo las cuentas permitidas en api/ingest-bill.js).
  *  Desde ahí revisa el correo cada hora. Para probar sin esperar, ejecuta `revisarCorreo`.
  *  Lo que no pueda leer queda con la etiqueta "MiHogar/revisar"; lo registrado, con "MiHogar/registrado".
  */
 const CONFIG = {
   endpoint: 'https://mihogar-orcin.vercel.app/api/ingest-bill',
-  secret: 'PEGA_AQUI_CRON_SECRET',
   dias: 45, // solo correos de los últimos N días
 };
 
@@ -33,6 +33,8 @@ function instalar() {
 }
 
 function revisarCorreo() {
+  // Pedir el correo hace que Google incluya ese dato en el token, y así la app reconoce la cuenta.
+  console.log('Cuenta: ' + Session.getEffectiveUser().getEmail());
   const ok = GmailApp.getUserLabelByName(ETIQUETA_OK) || GmailApp.createLabel(ETIQUETA_OK);
   const revisar = GmailApp.getUserLabelByName(ETIQUETA_REVISAR) || GmailApp.createLabel(ETIQUETA_REVISAR);
 
@@ -48,7 +50,7 @@ function revisarCorreo() {
       const res = UrlFetchApp.fetch(CONFIG.endpoint, {
         method: 'post',
         contentType: 'application/json',
-        headers: { Authorization: 'Bearer ' + CONFIG.secret },
+        headers: { 'X-Google-Token': ScriptApp.getOAuthToken() },
         muteHttpExceptions: true,
         payload: JSON.stringify({
           provider: empresa.id,

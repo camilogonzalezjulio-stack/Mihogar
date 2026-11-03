@@ -93,7 +93,7 @@ el correo. Si ese recibo ya está marcado como pagado no lo toca; si ya existe y
 
 Instalación:
 1. https://script.google.com (con la cuenta donde llegan las facturas) → **Nuevo proyecto**.
-2. Pega todo `scripts/gmail-a-mihogar.gs` y en `CONFIG.secret` pon el mismo valor de `CRON_SECRET` de Vercel.
+2. Pega todo `scripts/gmail-a-mihogar.gs` (no lleva claves: la app reconoce tu cuenta de Google).
 3. Guarda, elige la función **`instalar`** → ▶ Ejecutar → acepta los permisos de Gmail.
 
 En Gmail quedan etiquetas: **MiHogar/registrado** (leído y guardado) y **MiHogar/revisar** (no se encontró el

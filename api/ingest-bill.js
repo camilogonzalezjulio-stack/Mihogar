@@ -1,14 +1,35 @@
 // Recibe una factura leída de un correo (scripts/gmail-a-mihogar.gs) y la registra en Servicios.
 // POST JSON { provider: 'aire'|'gases'|'triplea'|'claro', amount, month: 'YYYY-MM', due?: 'YYYY-MM-DD', messageId? }
-// Requiere `Authorization: Bearer <INGEST_SECRET>` (si no existe esa variable, se usa CRON_SECRET).
-import { randomBytes } from 'node:crypto';
+// Autorización, una de dos:
+//  - `X-Google-Token: <token OAuth>` de una cuenta de Google permitida (así llama el Apps Script, sin claves).
+//  - `Authorization: Bearer <INGEST_SECRET>` (si no existe esa variable, se usa CRON_SECRET).
+import { createHash, randomBytes } from 'node:crypto';
 import { db } from '../lib/admin.mjs';
 import { PROVIDERS, applyBill } from '../lib/bills.mjs';
 
+// SHA-256 de los correos de Google que pueden registrar facturas (en hash para no publicar el correo en el repo).
+// Se puede reemplazar con la variable INGEST_GOOGLE_EMAILS="correo1,correo2".
+const ALLOWED_EMAIL_HASHES = ['884cad76e80a884bcd73663146fe94996e3836d6fbbc9cebfc59519b3e34d3f8'];
+const sha = s => createHash('sha256').update(String(s).trim().toLowerCase()).digest('hex');
+
+async function authorized(req) {
+  const secret = process.env.INGEST_SECRET || process.env.CRON_SECRET;
+  if (secret && req.headers.authorization === `Bearer ${secret}`) return true;
+  const token = req.headers['x-google-token'];
+  if (!token) return false;
+  const r = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token));
+  if (!r.ok) return false;
+  const info = await r.json();
+  if (String(info.email_verified) !== 'true' || !info.email) return false;
+  const allowed = process.env.INGEST_GOOGLE_EMAILS
+    ? process.env.INGEST_GOOGLE_EMAILS.split(',').map(sha)
+    : ALLOWED_EMAIL_HASHES;
+  return allowed.includes(sha(info.email));
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' });
-  const secret = process.env.INGEST_SECRET || process.env.CRON_SECRET;
-  if (!secret || req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'No autorizado' });
+  if (!(await authorized(req))) return res.status(401).json({ error: 'No autorizado' });
 
   let p;
   try { p = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}; }

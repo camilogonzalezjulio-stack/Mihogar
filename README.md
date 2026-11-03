@@ -61,25 +61,25 @@ Todos los días a las **9:00 am, 4:00 pm y 9:00 pm (hora Colombia)** se revisa y
 Si no hay nada pendiente, no se envía nada.
 
 Lo corre **Vercel Cron** (gratis en el plan Hobby), porque las funciones programadas de Firebase exigen el plan de pago Blaze.
-Función:  (usa ) · horarios:  en  (en UTC).
+Función: `api/notify-unpaid.js` (usa `scripts/notify-unpaid.mjs`) · horarios: `crons` en `vercel.json` (en UTC).
 
 ### Configuración
-Todas las variables van en **Vercel → mihogar → Settings → Environment Variables** (se puede pegar el  completo):
+Todas las variables van en **Vercel → mihogar → Settings → Environment Variables** (se puede pegar el `.env` completo):
 
 | Variable | Valor |
 |---|---|
-|  | token del bot (@BotFather → ) |
-|  | id del grupo (con el bot dentro; en grupos empieza con ) |
-|  | canal → Editar canal → Integraciones → Webhooks → Copiar URL |
-|  | contenido completo del JSON de Firebase → Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada. **Es secreto.** |
-|  | texto al azar; Vercel lo envía en cada ejecución y la función rechaza cualquier llamada sin él |
-|  | opcional, enlace a la app al final del mensaje |
+| `TELEGRAM_BOT_TOKEN` | token del bot (@BotFather → `/newbot`) |
+| `TELEGRAM_CHAT_ID` | id del grupo (con el bot dentro; en grupos empieza con `-`) |
+| `DISCORD_WEBHOOK_URL` | canal → Editar canal → Integraciones → Webhooks → Copiar URL |
+| `FIREBASE_SERVICE_ACCOUNT` | contenido completo del JSON de Firebase → Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada. **Es secreto.** |
+| `CRON_SECRET` | texto al azar; Vercel lo envía en cada ejecución y la función rechaza cualquier llamada sin él |
+| `APP_URL` | opcional, enlace a la app al final del mensaje |
 
-Después de agregar o cambiar variables hay que volver a publicar (Deployments → ⋯ → Redeploy, o un ).
+Después de agregar o cambiar variables hay que volver a publicar (Deployments → ⋯ → Redeploy, o un `git push`).
 
 Notas:
 - En el plan Hobby, Vercel ejecuta cada cron en algún momento dentro de esa hora (el de las 9:00 puede llegar 9:00–9:59).
-- Para no avisar de servicios sin recibo registrado, agrega la variable .
+- Para no avisar de servicios sin recibo registrado, agrega la variable `NOTIFY_INCLUDE_UNREGISTERED=0`.
 
-Prueba local (sin enviar nada): ,
+Prueba local (sin enviar nada): `NOTIFY_FORCE=1 NOTIFY_DRY_RUN=1 NOTIFY_DATA_FILE=respaldo.json npm run notify`,
 usando un archivo descargado con el botón "Respaldo" de la app.

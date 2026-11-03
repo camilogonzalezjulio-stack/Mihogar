@@ -54,10 +54,11 @@ function revisarCorreo() {
     const q = `(${origen}) newer_than:${CONFIG.dias}d -label:${ETIQUETA_OK} -label:${ETIQUETA_REVISAR} -label:${ETIQUETA_IGNORADO}`;
     GmailApp.search(q, 0, 20).forEach(hilo => {
       const msg = hilo.getMessages().pop(); // el más reciente del hilo
-      const texto = msg.getSubject() + '\n' + msg.getPlainBody();
+      // Algunas empresas (p. ej. Triple A) mandan el valor solo en el PDF adjunto.
+      const texto = msg.getSubject() + '\n' + msg.getPlainBody() + '\n' + textoDePdfs(msg);
       if (empresa.cuenta && !traeCuenta(texto, empresa.cuenta)) { hilo.addLabel(ignorado); return; }
       const valor = leerValor(texto);
-      if (!valor) { hilo.addLabel(revisar); return; }
+      if (!valor) { console.log('Sin valor', empresa.id, texto.slice(0, 800)); hilo.addLabel(revisar); return; }
 
       const vence = leerVencimiento(texto);
       const res = UrlFetchApp.fetch(CONFIG.endpoint, {
@@ -79,6 +80,31 @@ function revisarCorreo() {
       // otros errores: se reintenta en la próxima revisión
     });
   });
+}
+
+/** Texto de los PDF adjuntos, extraído por la app (api/pdf-text). '' si no hay PDF o no se pudo leer. */
+function textoDePdfs(msg) {
+  return msg.getAttachments()
+    .filter(a => a.getContentType() === 'application/pdf' || /\.pdf$/i.test(a.getName()))
+    .map(a => {
+      const res = UrlFetchApp.fetch(CONFIG.endpoint.replace('ingest-bill', 'pdf-text'), {
+        method: 'post',
+        contentType: 'application/json',
+        headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+        muteHttpExceptions: true,
+        payload: JSON.stringify({ pdf: Utilities.base64Encode(a.getBytes()) }),
+      });
+      if (res.getResponseCode() !== 200) { console.log('PDF', a.getName(), res.getResponseCode(), res.getContentText()); return ''; }
+      return JSON.parse(res.getContentText()).text || '';
+    })
+    .join('\n');
+}
+
+/** Quita la etiqueta "MiHogar/revisar" de los correos recientes y los vuelve a revisar. */
+function reintentarRevisar() {
+  const revisar = GmailApp.getUserLabelByName(ETIQUETA_REVISAR);
+  if (revisar) GmailApp.search(`label:${ETIQUETA_REVISAR} newer_than:${CONFIG.dias}d`, 0, 50).forEach(h => h.removeLabel(revisar));
+  revisarCorreo();
 }
 
 /**

@@ -348,7 +348,7 @@ function render() {
   $('#who').innerHTML = cloud && user ? `<span class="avatar" title="${esc(name)}">${esc(name[0]?.toUpperCase())}</span>
     <button class="ghost sm" data-act="logout">Salir</button>` : '';
   const locked = cloud && !user;
-  $('#nav').hidden = $('.backup').hidden = locked;
+  $('#nav').hidden = locked;
   if (locked) {
     $('#app').innerHTML = `<div class="card login">
       <img src="/logo.svg" alt="MiHogar">
@@ -505,23 +505,5 @@ document.addEventListener('change', e => {
   const el = e.target.closest('input[type=checkbox][data-act]');
   if (el) A[el.dataset.act](el.dataset.id, el);
 });
-
-/* ---------- Respaldo ---------- */
-$('#btn-export').onclick = () => {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' }));
-  a.download = `mihogar-${today()}.json`;
-  a.click();
-};
-$('#btn-import').onclick = () => $('#file-import').click();
-$('#file-import').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  try {
-    const d = JSON.parse(await f.text());
-    if (!d.services || !d.bills || !d.people) throw 0;
-    if (confirm('Esto reemplazará los datos actuales. ¿Continuar?')) { S = { ...defaults(), ...d }; save(); }
-  } catch { alert('Archivo inválido'); }
-  e.target.value = '';
-};
 
 render();

@@ -11,8 +11,10 @@ service cloud.firestore {
     }
 
     // Datos compartidos de la casa: servicios, recibos y compras.
+    // `list` va aparte: la app escucha la colección completa y en una consulta no se conoce `doc`.
     match /homes/main/data/{doc} {
-      allow read, write: if permitido() && doc in ['services', 'bills', 'shopping'];
+      allow list: if permitido();
+      allow get, write: if permitido() && doc in ['services', 'bills', 'shopping'];
     }
     match /homes/main/receipts/{doc} {
       allow read, write: if permitido();
@@ -20,7 +22,8 @@ service cloud.firestore {
 
     // Finanzas personales: solo el dueño de la cuenta puede leerlas o escribirlas.
     match /homes/main/private/{userId}/data/{doc} {
-      allow read, write: if permitido() && request.auth.uid == userId && doc in ['people', 'tx'];
+      allow list: if permitido() && request.auth.uid == userId;
+      allow get, write: if permitido() && request.auth.uid == userId && doc in ['people', 'tx'];
     }
   }
 }

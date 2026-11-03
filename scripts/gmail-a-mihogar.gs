@@ -15,16 +15,25 @@ const CONFIG = {
   dias: 45, // solo correos de los últimos N días
 };
 
-// Remitentes de cada empresa. Si alguna factura no se detecta, revisa de qué correo llega y agrégalo aquí.
+// Remitentes de cada empresa y tu número de cuenta con ella (NIC, póliza, contrato, ID).
+// Con `cuenta`, solo se registran correos que traen ese número (descarta publicidad y facturas de otras casas)
+// y también se encuentran facturas reenviadas desde otro correo. Escribe aquí tus números, no en el repositorio.
 const EMPRESAS = [
-  { id: 'aire', from: ['air-e.com'] },
-  { id: 'gases', from: ['gascaribe.com', 'gasesdelcaribe.com'] },
-  { id: 'triplea', from: ['aaa.com.co', 'triplea.com.co'] },
-  { id: 'claro', from: ['claro.com.co'] },
+  { id: 'aire', from: ['air-e.com'], cuenta: '' },                          // Luz: NIC
+  { id: 'gases', from: ['gascaribe.com', 'gasesdelcaribe.com'], cuenta: '' }, // Gas: contrato
+  { id: 'triplea', from: ['aaa.com.co', 'triplea.com.co'], cuenta: '' },      // Agua: póliza
+  { id: 'claro', from: ['claro.com.co'], cuenta: '' },                       // Internet: ID
 ];
 
 const ETIQUETA_OK = 'MiHogar/registrado';
 const ETIQUETA_REVISAR = 'MiHogar/revisar';
+const ETIQUETA_IGNORADO = 'MiHogar/ignorado';
+
+const soloDigitos = s => String(s || '').replace(/\D/g, '');
+/** ¿El texto trae el número de cuenta? Acepta espacios, puntos o guiones en medio ("6676845-5"). */
+function traeCuenta(texto, cuenta) {
+  return texto.replace(/[\s.\-]/g, '').includes(soloDigitos(cuenta));
+}
 
 function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
@@ -38,12 +47,15 @@ function revisarCorreo() {
   console.log('Cuenta: ' + Session.getEffectiveUser().getEmail());
   const ok = GmailApp.getUserLabelByName(ETIQUETA_OK) || GmailApp.createLabel(ETIQUETA_OK);
   const revisar = GmailApp.getUserLabelByName(ETIQUETA_REVISAR) || GmailApp.createLabel(ETIQUETA_REVISAR);
+  const ignorado = GmailApp.getUserLabelByName(ETIQUETA_IGNORADO) || GmailApp.createLabel(ETIQUETA_IGNORADO);
 
   EMPRESAS.forEach(empresa => {
-    const q = `from:(${empresa.from.join(' OR ')}) newer_than:${CONFIG.dias}d -label:${ETIQUETA_OK} -label:${ETIQUETA_REVISAR}`;
+    const origen = `from:(${empresa.from.join(' OR ')})` + (empresa.cuenta ? ` OR "${soloDigitos(empresa.cuenta)}"` : '');
+    const q = `(${origen}) newer_than:${CONFIG.dias}d -label:${ETIQUETA_OK} -label:${ETIQUETA_REVISAR} -label:${ETIQUETA_IGNORADO}`;
     GmailApp.search(q, 0, 20).forEach(hilo => {
       const msg = hilo.getMessages().pop(); // el más reciente del hilo
       const texto = msg.getSubject() + '\n' + msg.getPlainBody();
+      if (empresa.cuenta && !traeCuenta(texto, empresa.cuenta)) { hilo.addLabel(ignorado); return; }
       const valor = leerValor(texto);
       if (!valor) { hilo.addLabel(revisar); return; }
 
@@ -64,7 +76,7 @@ function revisarCorreo() {
       console.log(empresa.id, valor, res.getResponseCode(), res.getContentText());
       if (res.getResponseCode() === 200) hilo.addLabel(ok);
       else if (res.getResponseCode() === 422) hilo.addLabel(revisar); // no hay servicio que corresponda en la app
-      // otros errores: se reintenta en la próxima hora
+      // otros errores: se reintenta en la próxima revisión
     });
   });
 }

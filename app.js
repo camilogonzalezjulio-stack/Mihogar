@@ -239,7 +239,8 @@ function vServicios() {
   const cards = S.services.map(s => {
     const bills = S.bills.filter(b => b.serviceId === s.id && b.month === ui.month);
     return `<div class="card">
-      <div class="row between"><h3>${esc(s.icon)} ${esc(s.name)}${s.fixed > 0 ? ` <span class="muted">· fijo ${money(s.fixed)}</span>` : ''}</h3>
+      <div class="row between"><h3>${esc(s.icon)} ${esc(s.name)}${s.fixed > 0 ? ` <span class="muted">· fijo ${money(s.fixed)}</span>` : ''}
+        ${s.account ? `<br><span class="muted">N.º ${esc(s.account)}</span>` : ''}</h3>
         <span><button class="icon" data-act="bill-add" data-id="${s.id}" title="Registrar gasto">＋</button>
         <button class="icon" data-act="svc-edit" data-id="${s.id}" title="Editar servicio">✎</button></span></div>
       ${bills.map(b => `<div class="item">
@@ -359,6 +360,7 @@ function vFinanzas() {
 }
 
 const FIXED_LABEL = 'Valor fijo mensual (déjalo vacío si cambia cada mes)';
+const ACCOUNT_LABEL = 'Número de cuenta (NIC, póliza, contrato o ID)';
 
 const views = { resumen: vResumen, servicios: vServicios, compras: vCompras, finanzas: vFinanzas };
 
@@ -397,16 +399,18 @@ const A = {
     openForm('Nuevo servicio o gasto', [
       { name: 'name', label: 'Nombre (ej. Seguro, Aseo, Streaming)' },
       { name: 'icon', label: 'Emoji', value: '📌', required: false },
+      { name: 'account', label: ACCOUNT_LABEL, required: false },
       { name: 'fixed', label: FIXED_LABEL, type: 'number', required: false },
-    ], v => { S.services.push({ id: uid(), name: v.name, icon: v.icon || '📌', fixed: v.fixed || 0 }); ensureFixedBills(); save(); });
+    ], v => { S.services.push({ id: uid(), name: v.name, icon: v.icon || '📌', account: v.account, fixed: v.fixed || 0 }); ensureFixedBills(); save(); });
   },
   'svc-edit'(id) {
     const s = find(S.services, id);
     openForm('Editar servicio', [
       { name: 'name', label: 'Nombre', value: s.name },
       { name: 'icon', label: 'Emoji', value: s.icon, required: false },
+      { name: 'account', label: ACCOUNT_LABEL, value: s.account || '', required: false },
       { name: 'fixed', label: FIXED_LABEL, type: 'number', value: s.fixed || '', required: false },
-    ], v => { s.name = v.name; s.icon = v.icon || '📌'; s.fixed = v.fixed || 0; ensureFixedBills(); save(); },
+    ], v => { s.name = v.name; s.icon = v.icon || '📌'; s.account = v.account; s.fixed = v.fixed || 0; ensureFixedBills(); save(); },
     () => { S.bills.filter(b => b.serviceId === id && b.receipt).forEach(b => delReceipt(b.id)); S.services = S.services.filter(x => x.id !== id); S.bills = S.bills.filter(b => b.serviceId !== id); save(); });
   },
   'bill-add'(id) { billForm({ serviceId: id, month: ui.month, amount: '', due: '', note: '', paid: false }, true); },

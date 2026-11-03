@@ -59,7 +59,7 @@ function revisarCorreo() {
       const valor = leerValor(texto);
       if (!valor) { hilo.addLabel(revisar); return; }
 
-      const fecha = msg.getDate();
+      const vence = leerVencimiento(texto);
       const res = UrlFetchApp.fetch(CONFIG.endpoint, {
         method: 'post',
         contentType: 'application/json',
@@ -68,8 +68,8 @@ function revisarCorreo() {
         payload: JSON.stringify({
           provider: empresa.id,
           amount: valor,
-          month: Utilities.formatDate(fecha, 'America/Bogota', 'yyyy-MM'),
-          due: leerVencimiento(texto) || undefined,
+          month: periodo(vence || Utilities.formatDate(msg.getDate(), 'America/Bogota', 'yyyy-MM-dd')),
+          due: vence || undefined,
           messageId: msg.getId(),
         }),
       });
@@ -79,6 +79,15 @@ function revisarCorreo() {
       // otros errores: se reintenta en la próxima revisión
     });
   });
+}
+
+/**
+ * Mes al que corresponde la factura ("YYYY-MM"): el anterior a la fecha límite, o si no la trae, el anterior
+ * al día en que llegó el correo. La factura de octubre llega y se paga en noviembre.
+ */
+function periodo(fechaISO) {
+  const [y, m] = fechaISO.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 }
 
 /** "$ 85.430" / "85.430,00" / "$85,430" → 85430. Devuelve 0 si no encuentra un valor a pagar. */

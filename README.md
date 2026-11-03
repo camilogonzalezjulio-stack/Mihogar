@@ -88,8 +88,11 @@ usando un archivo descargado con el botón "Respaldo" de la app.
 
 `scripts/gmail-a-mihogar.gs` es un Google Apps Script que corre gratis en tu cuenta de Gmail cada 5 minutos: busca
 correos de **Air-e, Gases del Caribe, Triple A y Claro**, lee el valor a pagar (y la fecha límite si aparece) y lo
-envía a `api/ingest-bill.js`, que lo registra como **pendiente** en Luz, Gas, Agua o Internet del mes en que llegó
-el correo. Si ese recibo ya está marcado como pagado no lo toca; si ya existe y está pendiente, actualiza el valor.
+envía a `api/ingest-bill.js`, que lo registra como **pendiente** en Luz, Gas, Agua o Internet del **mes facturado**:
+el anterior a la fecha límite (o, si no la trae, el anterior a la llegada del correo). Así la factura de octubre que
+llega en noviembre queda en octubre, vence el 3 de noviembre y desde el 4 entra en mora.
+Si ese recibo ya está marcado como pagado no lo toca; si ya existe y está pendiente, actualiza el valor.
+Solo se registran correos que traen el **número de cuenta** de `EMPRESAS` (los demás quedan en "MiHogar/ignorado").
 
 Instalación:
 1. https://script.google.com (con la cuenta donde llegan las facturas) → **Nuevo proyecto**.

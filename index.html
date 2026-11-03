@@ -42,6 +42,17 @@
     <form method="dialog" id="dlg-form"></form>
   </dialog>
 
+  <dialog id="viewer" aria-label="Visor de imagen">
+    <div class="viewer-bar">
+      <button type="button" data-v="out" title="Alejar">−</button>
+      <button type="button" data-v="reset" title="Tamaño original">1:1</button>
+      <button type="button" data-v="in" title="Acercar">+</button>
+      <a id="viewer-dl" download="comprobante.jpg" title="Descargar">⬇ Descargar</a>
+      <button type="button" data-v="close" title="Cerrar">✕</button>
+    </div>
+    <div class="viewer-stage"><img id="viewer-img" alt="Imagen ampliada" draggable="false"></div>
+  </dialog>
+
   <script type="module" src="/app.js"></script>
 </body>
 </html>

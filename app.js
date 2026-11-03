@@ -543,13 +543,71 @@ async function showReceipt(b, proof = false) {
   dlg.showModal();
   try {
     const data = await getReceipt(proof ? proofKey(b.id) : b.id);
-    $('#r-img').outerHTML = !data ? '<div class="empty">No se encontró el archivo</div>'
-      : data.startsWith('data:application/pdf')
-        ? `<embed src="${data}" type="application/pdf" style="width:100%;height:60vh;border-radius:8px">
-           <a class="ghost sm" href="${data}" download="comprobante.pdf">Descargar PDF</a>`
-        : `<a href="${data}" target="_blank"><img src="${data}" alt="${proof ? 'Comprobante' : 'Recibo'}" style="width:100%;border-radius:8px"></a>`;
+    if (!data) { $('#r-img').outerHTML = '<div class="empty">No se encontró el archivo</div>'; return; }
+    // Los navegadores bloquean abrir enlaces data: en otra pestaña; un blob: sí se puede abrir y descargar.
+    const url = URL.createObjectURL(await (await fetch(data)).blob());
+    const name = proof ? 'comprobante' : 'recibo';
+    if (data.startsWith('data:application/pdf')) {
+      $('#r-img').outerHTML = `<embed src="${url}" type="application/pdf" style="width:100%;height:60vh;border-radius:8px">
+        <div class="row" style="margin-top:8px"><a class="ghost sm" href="${url}" target="_blank" rel="noopener">Abrir en pestaña nueva</a>
+        <a class="ghost sm" href="${url}" download="${name}.pdf">⬇ Descargar PDF</a></div>`;
+    } else {
+      $('#r-img').outerHTML = `<img src="${url}" alt="${name}" title="Toca para ampliar"
+        style="width:100%;border-radius:8px;cursor:zoom-in" data-view-img>
+        <div class="muted" style="text-align:center;margin-top:6px">Toca la imagen para ampliarla</div>`;
+      f.querySelector('[data-view-img]').onclick = () => openViewer(url, `${name}.jpg`);
+    }
   } catch (e) { $('#r-img').textContent = 'Error: ' + e.message; }
 }
+
+/* ---------- Visor de imágenes (zoom y desplazamiento) ---------- */
+const vw = { scale: 1, x: 0, y: 0, drag: null };
+function vwApply() {
+  $('#viewer-img').style.transform = `translate(${vw.x}px, ${vw.y}px) scale(${vw.scale})`;
+}
+function vwZoom(factor) {
+  vw.scale = Math.min(8, Math.max(0.5, vw.scale * factor));
+  if (vw.scale <= 1) { vw.x = 0; vw.y = 0; }
+  vwApply();
+}
+function openViewer(src, filename) {
+  Object.assign(vw, { scale: 1, x: 0, y: 0, drag: null });
+  $('#viewer-img').src = src;
+  Object.assign($('#viewer-dl'), { href: src, download: filename });
+  vwApply();
+  $('#viewer').showModal();
+}
+(() => {
+  const v = $('#viewer'), img = $('#viewer-img'), stage = v.querySelector('.viewer-stage');
+  v.addEventListener('click', e => {
+    const b = e.target.closest('[data-v]');
+    if (b) ({ in: () => vwZoom(1.4), out: () => vwZoom(1 / 1.4), reset: () => { Object.assign(vw, { scale: 1, x: 0, y: 0 }); vwApply(); }, close: () => v.close() })[b.dataset.v]();
+    else if (e.target === stage) v.close(); // tocar el fondo cierra
+  });
+  stage.addEventListener('wheel', e => { e.preventDefault(); vwZoom(e.deltaY < 0 ? 1.2 : 1 / 1.2); }, { passive: false });
+  img.addEventListener('dblclick', () => { vw.scale > 1 ? Object.assign(vw, { scale: 1, x: 0, y: 0 }) : (vw.scale = 2.5); vwApply(); });
+  // Arrastrar con mouse o un dedo; pellizcar con dos dedos.
+  const pts = new Map();
+  let pinch = null;
+  img.addEventListener('pointerdown', e => {
+    img.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: vw.scale }; }
+    else vw.drag = { x: e.clientX - vw.x, y: e.clientY - vw.y };
+  });
+  img.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      vw.scale = Math.min(8, Math.max(0.5, pinch.s * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d));
+    } else if (vw.drag) { vw.x = e.clientX - vw.drag.x; vw.y = e.clientY - vw.drag.y; }
+    vwApply();
+  });
+  const end = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) vw.drag = null; };
+  img.addEventListener('pointerup', end);
+  img.addEventListener('pointercancel', end);
+})();
 
 function buyForm(i, isNew) {
   openForm(isNew ? 'Agregar producto' : 'Editar producto', [

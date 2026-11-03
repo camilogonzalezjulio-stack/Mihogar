@@ -1,6 +1,6 @@
 // Avisa por Telegram y Discord qué servicios no se han pagado.
-// Lo ejecuta GitHub Actions (.github/workflows/notify-unpaid.yml) todos los días a las 9 am, 4 pm y 9 pm
-// hora Colombia; aquí se decide qué avisar:
+// Lo ejecuta Vercel Cron (api/notify-unpaid.js, horarios en vercel.json) todos los días a las 9 am, 4 pm y 9 pm
+// hora Colombia; también se puede correr a mano con `npm run notify`. Aquí se decide qué avisar:
 //   - Desde el día 25: recibos del mes actual sin pagar (y servicios sin recibo registrado).
 //   - Del 1 al 3: recibos del mes anterior sin pagar ("vencen el 3").
 //   - Después del 3: cada recibo de un mes anterior sin pagar sale con sus días de mora, hasta que se pague.
@@ -17,6 +17,7 @@
 //   NOTIFY_DATA_FILE    leer un respaldo JSON de la app en vez de Firestore (para probar)
 //   NOTIFY_TODAY        fecha YYYY-MM-DD a usar como "hoy" (para probar)
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
 const env = process.env;
 const TZ = env.NOTIFY_TZ || 'America/Bogota';
@@ -34,9 +35,10 @@ function today() {
 async function loadHome() {
   if (env.NOTIFY_DATA_FILE) return JSON.parse(await readFile(env.NOTIFY_DATA_FILE, 'utf8'));
   if (!env.FIREBASE_SERVICE_ACCOUNT) throw new Error('Falta FIREBASE_SERVICE_ACCOUNT');
-  const { initializeApp, cert } = await import('firebase-admin/app');
+  const { initializeApp, getApps, cert } = await import('firebase-admin/app');
   const { getFirestore } = await import('firebase-admin/firestore');
-  initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
+  // En Vercel la misma instancia atiende varias ejecuciones: inicializar solo una vez.
+  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
   const snap = await getFirestore().collection('homes/main/data').get();
   const home = {};
   snap.forEach(d => { home[d.id] = d.data().items; });
@@ -119,22 +121,28 @@ async function post(name, url, body) {
   console.log(`Enviado a ${name}`);
 }
 
-async function main() {
+// Arma el mensaje y lo envía. Devuelve { text, sent, errors }; lanza error si no hay canales configurados.
+export async function run() {
   const text = buildMessage(await loadHome(), today());
-  if (!text) { console.log('Nada que avisar hoy. 🎉'); return; }
+  if (!text) { console.log('Nada que avisar hoy. 🎉'); return { text: null, sent: [], errors: [] }; }
   console.log(text);
-  if (env.NOTIFY_DRY_RUN === '1') return;
+  if (env.NOTIFY_DRY_RUN === '1') return { text, sent: [], errors: [] };
 
   const jobs = [];
   if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID)
-    jobs.push(post('Telegram', `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, { chat_id: env.TELEGRAM_CHAT_ID, text }));
+    jobs.push(post('Telegram', `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, { chat_id: env.TELEGRAM_CHAT_ID, text }).then(() => 'Telegram'));
   if (env.DISCORD_WEBHOOK_URL)
-    jobs.push(post('Discord', env.DISCORD_WEBHOOK_URL, { content: text }));
+    jobs.push(post('Discord', env.DISCORD_WEBHOOK_URL, { content: text }).then(() => 'Discord'));
   if (!jobs.length) throw new Error('No hay Telegram ni Discord configurados');
 
-  const failed = (await Promise.allSettled(jobs)).filter(r => r.status === 'rejected');
-  failed.forEach(f => console.error(f.reason.message));
-  if (failed.length) process.exit(1);
+  const results = await Promise.allSettled(jobs);
+  const errors = results.filter(r => r.status === 'rejected').map(r => r.reason.message);
+  errors.forEach(e => console.error(e));
+  return { text, sent: results.filter(r => r.status === 'fulfilled').map(r => r.value), errors };
 }
 
-main().catch(e => { console.error(e.message); process.exit(1); });
+// Ejecutado desde la terminal (npm run notify), no importado por la función de Vercel.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  run().then(r => { if (r.errors.length) process.exit(1); })
+    .catch(e => { console.error(e.message); process.exit(1); });
+}

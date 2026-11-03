@@ -3,5 +3,10 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm ci --ignore-scripts"
+  "installCommand": "npm ci --ignore-scripts",
+  "crons": [
+    { "path": "/api/notify-unpaid", "schedule": "0 14 * * *" },
+    { "path": "/api/notify-unpaid", "schedule": "0 21 * * *" },
+    { "path": "/api/notify-unpaid", "schedule": "0 2 * * *" }
+  ]
 }

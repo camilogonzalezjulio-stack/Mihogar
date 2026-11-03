@@ -60,37 +60,26 @@ Todos los días a las **9:00 am, 4:00 pm y 9:00 pm (hora Colombia)** se revisa y
 
 Si no hay nada pendiente, no se envía nada.
 
-Lo corre **GitHub Actions** (gratis), porque las funciones programadas de Firebase exigen el plan de pago Blaze.
-Script: `scripts/notify-unpaid.mjs` · horario: `.github/workflows/notify-unpaid.yml`.
+Lo corre **Vercel Cron** (gratis en el plan Hobby), porque las funciones programadas de Firebase exigen el plan de pago Blaze.
+Función:  (usa ) · horarios:  en  (en UTC).
 
-### 1. Telegram
-1. En Telegram habla con **@BotFather** → `/newbot` → copia el **token**.
-2. Crea un grupo con la familia, agrega el bot y escribe cualquier mensaje en el grupo.
-3. Abre `https://api.telegram.org/bot<TOKEN>/getUpdates` y copia `chat.id` (en grupos empieza con `-`).
+### Configuración
+Todas las variables van en **Vercel → mihogar → Settings → Environment Variables** (se puede pegar el  completo):
 
-### 2. Discord
-Canal → ⚙️ Editar canal → **Integraciones → Webhooks → Nuevo webhook** → **Copiar URL**.
+| Variable | Valor |
+|---|---|
+|  | token del bot (@BotFather → ) |
+|  | id del grupo (con el bot dentro; en grupos empieza con ) |
+|  | canal → Editar canal → Integraciones → Webhooks → Copiar URL |
+|  | contenido completo del JSON de Firebase → Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada. **Es secreto.** |
+|  | texto al azar; Vercel lo envía en cada ejecución y la función rechaza cualquier llamada sin él |
+|  | opcional, enlace a la app al final del mensaje |
 
-### 3. Cuenta de servicio de Firebase
-Consola → ⚙️ Configuración del proyecto → **Cuentas de servicio → Generar nueva clave privada**.
-Descarga un JSON. **Es secreto** (da acceso total a la base): no lo subas al repositorio ni lo compartas.
-
-### 4. GitHub
-1. Sube el proyecto a un repositorio de GitHub (puede ser privado).
-2. Repositorio → Settings → **Secrets and variables → Actions → New repository secret**:
-   | Secreto | Valor |
-   |---|---|
-   | `FIREBASE_SERVICE_ACCOUNT` | el contenido completo del JSON del paso 3 |
-   | `TELEGRAM_BOT_TOKEN` | token del bot |
-   | `TELEGRAM_CHAT_ID` | id del chat o grupo |
-   | `DISCORD_WEBHOOK_URL` | URL del webhook |
-   Opcional, en la pestaña **Variables**: `APP_URL` con el enlace de la app.
-3. Para probar: pestaña **Actions → Recordatorio de servicios sin pagar → Run workflow**, marcando "Enviar aunque no sea día 25".
+Después de agregar o cambiar variables hay que volver a publicar (Deployments → ⋯ → Redeploy, o un ).
 
 Notas:
-- GitHub puede retrasar las ejecuciones programadas unos minutos (a veces 15–30).
-- En repositorios públicos, GitHub pausa los workflows programados tras 60 días sin actividad en el repo; entra y reactívalo si pasa.
-- Si no quieres avisos de servicios sin recibo registrado, agrega la variable `NOTIFY_INCLUDE_UNREGISTERED=0` al paso `env` del workflow.
+- En el plan Hobby, Vercel ejecuta cada cron en algún momento dentro de esa hora (el de las 9:00 puede llegar 9:00–9:59).
+- Para no avisar de servicios sin recibo registrado, agrega la variable .
 
-Prueba local (sin enviar nada): `NOTIFY_FORCE=1 NOTIFY_DRY_RUN=1 NOTIFY_DATA_FILE=respaldo.json npm run notify`,
+Prueba local (sin enviar nada): ,
 usando un archivo descargado con el botón "Respaldo" de la app.

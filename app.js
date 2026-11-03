@@ -8,7 +8,7 @@ import { firebaseConfig, USER_DOMAIN } from './firebase-config.js';
 // Sin configurar Firebase, la app sigue funcionando solo con localStorage.
 const cloud = Boolean(firebaseConfig.apiKey);
 // Lo de la casa se comparte; las finanzas son privadas de cada usuario que inicia sesión.
-const SHARED = ['services', 'bills', 'shopping'];
+const SHARED = ['services', 'bills', 'shopping', 'shopcats'];
 const PRIVATE = ['people', 'tx'];
 let db, auth, user = null, unsubs = [];
 const synced = {};
@@ -26,7 +26,8 @@ const defaults = () => ({
     { id: uid(), name: 'Administración', icon: '🏢', fixed: 454000 },
   ],              // services: {id, name, icon, fixed?} — fixed: valor que se registra solo cada mes
   bills: [],     // {id, serviceId, month 'YYYY-MM', amount, due, paid, note}
-  shopping: [],  // {id, name, qty, price, category, done}
+  shopping: [],  // {id, name, qty, price, category (id de sección), done}
+  shopcats: [],  // secciones de Compras {id, name, icon}; se llenan con DEFAULT_SHOPCATS
   people: [],    // {id, name}
   tx: [],        // {id, personId, type 'in'|'out', amount, category, date, desc}
 });
@@ -83,7 +84,7 @@ function listen(col, keys, group, onEmpty) {
       if (!keys.includes(d.id)) return;
       S[d.id] = d.data().items; synced[d.id] = JSON.stringify(S[d.id]);
     });
-    if (group === 'shared' && ensureFixedBills()) { save(); return; }
+    if (group === 'shared') { const a = ensureFixedBills(), b = ensureShopCats(); if (a || b) { save(); return; } }
     cache(); render();
   }, e => alert('Sin acceso a la base de datos: ' + e.message));
 }
@@ -240,8 +241,9 @@ function vResumen() {
   return monthBar() + `<div class="grid">
     <div class="card stat"><div class="muted">⚡ Servicios del mes</div><div class="big">${money(paid + pend)}</div>
       <div class="muted"><span class="ok">Pagado ${money(paid)}</span> · <span class="warn">Pendiente ${money(pend)}</span></div></div>
-    <div class="card stat green"><div class="muted">🛒 Compras pendientes</div><div class="big">${toBuy.length} ítems</div>
-      <div class="muted">Estimado ${money(est)}</div></div>
+    <div class="card stat green clickable" data-act="shop-list" title="Generar la lista de compras">
+      <div class="muted">🛒 Compras pendientes</div><div class="big">${toBuy.length} ítems</div>
+      <div class="muted">Estimado ${money(est)} · <b>Toca para generar la lista 🧾</b></div></div>
   </div>
   <div class="grid two" style="margin-top:16px">
     <div class="card"><h2>Gasto en servicios (6 meses)</h2><div class="bars">
@@ -275,10 +277,35 @@ function vServicios() {
     <div class="grid">${cards}</div>`;
 }
 
-const SHOP_CATS = [['Limpieza', '🧽'], ['Baños', '🚿'], ['Cocina', '🍳'], ['Nevera', '🧊']];
-// Los ítems creados antes de las categorías (o con una que ya no existe) van a "Otros".
-const catOf = i => SHOP_CATS.some(([c]) => c === i.category) ? i.category : 'Otros';
+/* ---------- Compras: secciones editables (nombre e ícono) ---------- */
+const DEFAULT_SHOPCATS = [
+  { id: 'comida', name: 'Comida', icon: '🍽️' },
+  { id: 'banos', name: 'Baños', icon: '🚿' },
+  { id: 'cuarto', name: 'Cuarto principal', icon: '🛏️' },
+  { id: 'oficina', name: 'Oficina', icon: '💼' },
+  { id: 'lavanderia', name: 'Lavandería', icon: '🧺' },
+  { id: 'limpieza', name: 'Limpieza', icon: '🧽' },
+  { id: 'muebles', name: 'Muebles y/o accesorios', icon: '🛋️' },
+];
+const OTROS = { id: 'otros', name: 'Otros', icon: '📦' };
+const catById = id => S.shopcats.find(c => c.id === id);
+// Los productos sin sección (o de una sección borrada) van a "Otros".
+const catOf = i => catById(i.category) ? i.category : OTROS.id;
+const shopCatsWithOtros = () => [...S.shopcats, ...(S.shopping.some(i => catOf(i) === OTROS.id) ? [OTROS] : [])];
 const estimate = items => items.reduce((t, i) => t + (i.price || 0) * (i.qty || 1), 0);
+
+// Crea las secciones por defecto y pasa los productos de las secciones viejas (Cocina, Nevera…) a las nuevas.
+const OLD_CATS = { cocina: 'comida', nevera: 'comida', comida: 'comida', banos: 'banos', limpieza: 'limpieza' };
+function ensureShopCats() {
+  let changed = false;
+  if (!S.shopcats?.length) { S.shopcats = DEFAULT_SHOPCATS.map(c => ({ ...c })); changed = true; }
+  for (const i of S.shopping) {
+    if (catById(i.category)) continue;
+    const to = OLD_CATS[normName(i.category)];
+    if (to && catById(to)) { i.category = to; changed = true; }
+  }
+  return changed;
+}
 
 // En compras, `done` significa "hay en la casa"; sin marcar significa "falta".
 function vCompras() {
@@ -289,22 +316,22 @@ function vCompras() {
     <span class="grow"><span class="name">${esc(i.name)}</span>${i.done ? '' : ` <span class="muted">×${i.qty || 1}</span>`}</span>
     <b>${!i.done && i.price ? money(i.price * (i.qty || 1)) : ''}</b>
     <button class="icon" data-act="buy-edit" data-id="${i.id}">✎</button></div>`;
-  const cats = [...SHOP_CATS];
-  if (S.shopping.some(i => catOf(i) === 'Otros')) cats.push(['Otros', '📦']);
-  const split = c => {
-    const items = S.shopping.filter(i => catOf(i) === c);
+  const cats = shopCatsWithOtros();
+  const split = id => {
+    const items = S.shopping.filter(i => catOf(i) === id);
     return [items.filter(i => !i.done), items.filter(i => i.done)];
   };
 
-  // Pantalla de una categoría
-  const open = cats.find(([c]) => c === ui.shopCat);
+  // Pantalla de una sección
+  const open = cats.find(c => c.id === ui.shopCat);
   if (open) {
-    const [c, icon] = open, [p, d] = split(c);
+    const [p, d] = split(open.id), otros = open.id === OTROS.id;
     return `<button class="ghost sm" data-act="shop-back" style="margin-bottom:14px">← Compras</button>
       <div class="head">
-        <span class="row"><span class="cat-icon">${icon}</span><span><h2 style="margin:0">${c}</h2>
+        <span class="row"><span class="cat-icon">${esc(open.icon)}</span><span><h2 style="margin:0">${esc(open.name)}</h2>
           <span class="muted">${p.length} faltan · ${d.length} hay${p.length ? ' · Estimado ' + money(estimate(p)) : ''}</span></span></span>
-        ${c === 'Otros' ? '' : `<button class="btn" data-act="buy-add" data-id="${c}">+ Agregar producto</button>`}</div>
+        ${otros ? '' : `<span class="row"><button class="ghost" data-act="cat-edit" data-id="${open.id}" title="Cambiar nombre o ícono">✎ Sección</button>
+          <button class="btn" data-act="buy-add" data-id="${open.id}">+ Falta algo</button></span>`}</div>
       <div class="grid two-eq">
         <div class="card"><div class="section-label warn" style="margin-top:0">✖ Falta (${p.length})</div>
           ${p.map(line).join('') || '<div class="empty">No falta nada 🎉</div>'}</div>
@@ -313,12 +340,12 @@ function vCompras() {
       </div>`;
   }
 
-  // Vista general: una tarjeta por categoría
-  const tiles = cats.map(([c, icon]) => {
-    const [p, d] = split(c), total = p.length + d.length;
-    return `<button class="card tile" data-act="shop-open" data-id="${c}">
-      <span class="cat-icon">${icon}</span>
-      <h3>${c}</h3>
+  // Vista general: una tarjeta por sección
+  const tiles = cats.map(c => {
+    const [p, d] = split(c.id), total = p.length + d.length;
+    return `<button class="card tile" data-act="shop-open" data-id="${c.id}">
+      <span class="cat-icon">${esc(c.icon)}</span>
+      <h3>${esc(c.name)}</h3>
       <span class="muted">${total ? `<span class="${p.length ? 'warn' : 'ok'}"><b>${p.length}</b> faltan</span> · <b>${d.length}</b> hay` : 'Sin productos'}</span>
       <span class="progress"><i style="width:${total ? d.length / total * 100 : 0}%"></i></span>
       <span class="muted">${p.length ? 'Estimado ' + money(estimate(p)) : '&nbsp;'}</span>
@@ -326,9 +353,12 @@ function vCompras() {
   }).join('');
   return `<div class="head">
     <span><h2 style="margin:0">Compras e inventario</h2><span class="muted">${pend.length} faltan · ${S.shopping.length - pend.length} hay · Estimado ${money(estimate(pend))}</span></span>
-    <span class="row"><button class="btn" data-act="tx-scan" title="Leer una factura con la cámara">📷 Escanear factura</button>
-    <button class="btn" data-act="buy-add">+ Agregar</button></span></div>
-    <div class="grid tiles">${tiles}</div>`;
+    <span class="row"><button class="btn" data-act="shop-list" title="Generar la lista de lo que falta">🧾 Lista de compras</button>
+    <button class="btn" data-act="tx-scan" title="Leer una factura con la cámara">📷 Escanear factura</button>
+    <button class="btn" data-act="buy-add">+ Falta algo</button></span></div>
+    <div class="grid tiles">${tiles}
+      <button class="card tile tile-add" data-act="cat-add"><span class="cat-icon">＋</span><h3>Nueva sección</h3>
+        <span class="muted">Nombre e ícono a tu gusto</span></button></div>`;
 }
 
 function vFinanzas() {
@@ -444,9 +474,15 @@ const A = {
     b.paid = el.checked; save();
   },
 
-  'buy-add'(cat) { buyForm({ name: '', qty: 1, price: '', category: cat || SHOP_CATS[0][0] }, true); },
+  'buy-add'(cat) { buyForm({ name: '', qty: 1, price: '', category: cat || S.shopcats[0]?.id }, true); },
   'buy-edit'(id) { buyForm(find(S.shopping, id), false); },
-  'buy-toggle'(id) { const i = find(S.shopping, id); i.done = !i.done; save(); },
+  'buy-toggle'(id) {
+    const i = find(S.shopping, id); i.done = !i.done; save();
+    if (!i.done) notify({ type: 'missing', itemId: i.id });
+  },
+  'cat-add'() { catForm(null); },
+  'cat-edit'(id) { catForm(catById(id)); },
+  'shop-list'() { shopListPicker(); },
 
   'person-add'() {
     openForm('Nueva persona', [{ name: 'name', label: 'Nombre' }], v => {
@@ -536,17 +572,99 @@ function proofForm(b) {
   });
 }
 
-// Pide a Vercel que avise por Telegram y Discord "X ya pagó el servicio…". Solo con sesión en la nube.
-async function notifyPaid(billId) {
+// Pide a Vercel que avise por Telegram y Discord (api/notice.js): { type: 'paid', billId } → "X ya pagó el
+// servicio…"; { type: 'missing', itemId } → "X agregó que falta…". Solo con sesión en la nube.
+async function notify(body) {
   if (!inCloud()) return;
   try {
-    const r = await fetch('/api/paid-notice', {
+    const r = await fetch('/api/notice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + await user.getIdToken() },
-      body: JSON.stringify({ billId }),
+      body: JSON.stringify(body),
     });
-    if (!r.ok) console.warn('Aviso de pago:', r.status, await r.text());
-  } catch (e) { console.warn('Aviso de pago:', e.message); }
+    if (!r.ok) console.warn('Aviso:', r.status, await r.text());
+  } catch (e) { console.warn('Aviso:', e.message); }
+}
+const notifyPaid = billId => notify({ type: 'paid', billId });
+
+/* ---------- Lista de compras tipo recibo ---------- */
+function shopListPicker(selected) {
+  const f = $('#dlg-form'), dlg = $('#dlg');
+  f.oninput = f.onclick = null;
+  const cats = shopCatsWithOtros().map(c => ({ ...c, n: S.shopping.filter(i => !i.done && catOf(i) === c.id).length }));
+  const sel = new Set(selected || cats.filter(c => c.n).map(c => c.id));
+  f.innerHTML = `<h2>🧾 Lista de compras</h2><div class="muted">Marca las secciones que quieres en la lista.</div>
+    <div class="row" style="margin-top:10px"><button type="button" class="ghost sm" id="sl-all">Todas</button>
+      <button type="button" class="ghost sm" id="sl-none">Ninguna</button></div>
+    <div class="pick-list">${cats.map(c => `<label class="pick ${c.n ? '' : 'empty-cat'}">
+      <input type="checkbox" name="cat" value="${c.id}" ${sel.has(c.id) ? 'checked' : ''}>
+      <span class="pick-icon">${esc(c.icon)}</span><span class="grow">${esc(c.name)}</span>
+      <span class="muted">${c.n ? `${c.n} faltan` : 'nada'}</span></label>`).join('')}</div>
+    <div class="actions"><button type="button" class="ghost" id="sl-cancel">Cancelar</button><button class="btn">Generar lista</button></div>`;
+  const boxes = () => [...f.querySelectorAll('input[name=cat]')];
+  f.onclick = e => {
+    if (e.target.id === 'sl-all') boxes().forEach(b => { b.checked = true; });
+    if (e.target.id === 'sl-none') boxes().forEach(b => { b.checked = false; });
+    if (e.target.id === 'sl-cancel') dlg.close();
+  };
+  f.onsubmit = e => {
+    e.preventDefault();
+    const ids = boxes().filter(b => b.checked).map(b => b.value);
+    if (!ids.length) return alert('Elige al menos una sección.');
+    shopListReceipt(ids);
+  };
+  if (!dlg.open) dlg.showModal();
+}
+
+function shopListReceipt(ids) {
+  const f = $('#dlg-form');
+  f.oninput = f.onclick = null;
+  const cats = shopCatsWithOtros().filter(c => ids.includes(c.id));
+  const groups = cats.map(c => ({ c, items: S.shopping.filter(i => !i.done && catOf(i) === c.id) })).filter(g => g.items.length);
+  const all = groups.flatMap(g => g.items);
+  const total = estimate(all), qty = all.reduce((t, i) => t + (Number(i.qty) || 1), 0);
+  const now = new Date();
+  const who = (cloud ? userName() : find(S.people, ui.personId)?.name || '') || 'LA CASA';
+  const date = now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const order = String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const amt = i => i.price ? money(i.price * (i.qty || 1)).replace(/\s/g, '') : '—';
+  // Código de barras decorativo, siempre igual para el mismo día.
+  let seed = Number(order), bars = '';
+  for (let x = 0; x < 236;) { seed = (seed * 9301 + 49297) % 233280; const w = 1 + (seed % 3); bars += `<rect x="${x}" width="${w}" height="44"/>`; x += w + 1 + (seed % 2); }
+
+  const text = ['MIHOGAR · LISTA DE COMPRAS', date.toUpperCase(), '',
+    ...groups.flatMap(g => [`— ${g.c.name.toUpperCase()} —`, ...g.items.map(i => `${String(i.qty || 1).padStart(2, '0')}  ${i.name}${i.price ? '  ' + amt(i) : ''}`), '']),
+    `PRODUCTOS: ${qty}`, `TOTAL ESTIMADO: ${money(total)}`].join('\n');
+
+  f.innerHTML = `<div class="receipt">
+      <div class="r-title">MIHOGAR</div><div class="r-sub">LISTA DE COMPRAS</div>
+      <div class="r-meta">PEDIDO #${order} PARA ${esc(who.toUpperCase())}<br>${esc(date.toUpperCase())}</div>
+      <div class="r-line"></div>
+      <div class="r-row r-head"><span>CANT</span><span>PRODUCTO</span><span>APROX</span></div>
+      <div class="r-line"></div>
+      ${groups.map(g => `<div class="r-cat">${esc(g.c.icon)} ${esc(g.c.name.toUpperCase())}</div>
+        ${g.items.map(i => `<div class="r-row"><span>${String(i.qty || 1).padStart(2, '0')}</span><span>${esc(i.name.toUpperCase())}</span><span>${amt(i)}</span></div>`).join('')}`).join('')
+        || '<div class="r-empty">NO FALTA NADA EN ESTAS SECCIONES 🎉</div>'}
+      <div class="r-line"></div>
+      <div class="r-row r-sum"><span></span><span>PRODUCTOS:</span><span>${qty}</span></div>
+      <div class="r-row r-sum"><span></span><span>TOTAL ESTIMADO:</span><span>${money(total).replace(/\s/g, '')}</span></div>
+      <div class="r-line"></div>
+      <div class="r-meta">SECCIONES: ${esc(cats.map(c => c.name.toUpperCase()).join(', '))}</div>
+      <div class="r-thanks">¡GRACIAS POR HACER EL MERCADO!</div>
+      <svg class="r-barcode" viewBox="0 0 236 44" preserveAspectRatio="none">${bars}</svg>
+      <div class="r-foot">mihogar-orcin.vercel.app</div>
+    </div>
+    <div class="actions" style="flex-wrap:wrap">
+      <button type="button" class="ghost" id="sl-back">← Secciones</button>
+      <button type="button" class="ghost" id="sl-copy">📋 Copiar</button>
+      ${navigator.share ? '<button type="button" class="ghost" id="sl-share">📤 Compartir</button>' : ''}
+      <button class="btn">Cerrar</button></div>`;
+  f.onclick = async e => {
+    if (e.target.id === 'sl-back') shopListPicker(ids);
+    if (e.target.id === 'sl-copy') { try { await navigator.clipboard.writeText(text); e.target.textContent = '✓ Copiada'; } catch { alert(text); } }
+    if (e.target.id === 'sl-share') navigator.share({ title: 'Lista de compras', text }).catch(() => {});
+  };
+  f.onsubmit = e => { e.preventDefault(); $('#dlg').close(); };
 }
 
 async function showReceipt(b, proof = false) {
@@ -625,21 +743,43 @@ function openViewer(src, filename) {
   img.addEventListener('pointercancel', end);
 })();
 
+// Agregar a mano siempre es "falta"; lo que hay en casa llega al escanear una factura.
 function buyForm(i, isNew) {
-  openForm(isNew ? 'Agregar producto' : 'Editar producto', [
+  const catOptions = S.shopcats.map(c => ({ v: c.id, t: `${c.icon} ${c.name}` }));
+  openForm(isNew ? '¿Qué falta?' : 'Editar producto', [
     { name: 'name', label: 'Producto', value: i.name },
-    { name: 'status', label: 'Estado', type: 'select', value: i.done ? 'hay' : 'falta',
-      options: [{ v: 'falta', t: '✖ Falta (hay que comprar)' }, { v: 'hay', t: '✔ Hay en casa' }] },
+    ...(isNew ? [] : [{ name: 'status', label: 'Estado', type: 'select', value: i.done ? 'hay' : 'falta',
+      options: [{ v: 'falta', t: '✖ Falta (hay que comprar)' }, { v: 'hay', t: '✔ Hay en casa' }] }]),
     { name: 'qty', label: 'Cantidad a comprar', type: 'number', value: i.qty },
     { name: 'price', label: 'Precio unitario estimado', type: 'number', value: i.price, required: false },
-    { name: 'category', label: 'Categoría', type: 'select', value: catOf(i) === 'Otros' ? SHOP_CATS[0][0] : i.category,
-      options: SHOP_CATS.map(([c, icon]) => ({ v: c, t: `${icon} ${c}` })) },
+    { name: 'category', label: 'Sección', type: 'select', value: catById(i.category) ? i.category : S.shopcats[0]?.id, options: catOptions },
   ], ({ status, ...v }) => {
-    Object.assign(i, v, { done: status === 'hay' });
-    if (isNew) S.shopping.push({ id: uid(), ...i });
+    const nowMissing = isNew || (status === 'falta' && i.done);
+    Object.assign(i, v, { done: isNew ? false : status === 'hay' });
+    const rec = isNew ? { id: uid(), ...i } : i;
+    if (isNew) S.shopping.push(rec);
     save();
+    if (nowMissing) notify({ type: 'missing', itemId: rec.id });
   },
   isNew ? null : () => { S.shopping = S.shopping.filter(x => x.id !== i.id); save(); });
+}
+
+function catForm(c) {
+  const isNew = !c;
+  openForm(isNew ? 'Nueva sección' : 'Editar sección', [
+    { name: 'name', label: 'Nombre', value: c?.name || '' },
+    { name: 'icon', label: 'Ícono (un emoji, ej. 🍽️ 🛏️ 🧺 💼)', value: c?.icon || '📦', required: false },
+  ], v => {
+    if (isNew) S.shopcats.push({ id: uid(), name: v.name, icon: v.icon || '📦' });
+    else Object.assign(c, { name: v.name, icon: v.icon || '📦' });
+    save();
+  }, isNew ? null : () => {
+    const n = S.shopping.filter(i => i.category === c.id).length;
+    if (n && !confirm(`"${c.name}" tiene ${n} productos; pasarán a "Otros". ¿Eliminar la sección?`)) return;
+    S.shopcats = S.shopcats.filter(x => x.id !== c.id);
+    ui.shopCat = null;
+    save();
+  });
 }
 
 function txForm(t, isNew) {
@@ -655,15 +795,19 @@ function txForm(t, isNew) {
 /* ---------- Productos comprados → Compras "Hay en casa" ---------- */
 const normName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const words = s => normName(s).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 3 && !/^\d+$/.test(w));
-// Grupo de Compras según palabras del producto; lo que no se reconozca va a Cocina.
+// Sección de Compras según palabras del producto (si existe); lo demás va a Comida o a la primera sección.
 const CAT_WORDS = [
-  ['Nevera', /leche|huevo|queso|quesillo|yogur|kumis|mantequill|marg|jamon|salchich|carne|pollo|pescado|cerdo|res\b|fruta|manzana|pera|fresa|mora|limon|naranja|banano|mango|uva|tomate|cebolla|zanahoria|lechuga|verdura|kiwi|aguacate|papa\b|jugo|gaseosa|agua|cerveza|helado/],
-  ['Limpieza', /detergente|jabon (en )?polvo|lavaloza|lavalo|cloro|blanqu|varsol|suaviz|limpia|desinfect|esponja|bolsa|basura|ambientador|escoba|trapero|guante|lavaplatos/],
-  ['Baños', /papel hig|pa hig|higien|shampoo|champu|crema dental|dental|cepillo|jabon|toalla|desodorante|afeitar|pantaj|panal|protector/],
+  ['lavanderia', /detergente|jabon (en )?polvo|suaviz|blanqu|quitamanch|ropa|fab\b|ariel|lavanderia/],
+  ['limpieza', /lavaloza|lavalo|lavaplatos|cloro|varsol|limpia|desinfect|esponja|bolsa|basura|ambientador|escoba|trapero|guante|recogedor/],
+  ['banos', /papel hig|pa hig|higien|shampoo|champu|crema dental|dental|cepillo|jabon|toalla|desodorante|afeitar|pantaj|panal|protector/],
+  ['oficina', /cuaderno|lapiz|lapicero|boligrafo|esfero|resma|carpeta|grapa|marcador|tinta|cartucho/],
+  ['cuarto', /sabana|almohada|cobija|edredon|colchon|cortina/],
+  ['muebles', /silla|mesa|lampara|bombillo|foco|estante|repisa|cojin|alfombra|organizador/],
 ];
 function guessShopCat(name) {
   const n = normName(name);
-  return (CAT_WORDS.find(([, re]) => re.test(n)) || ['Cocina'])[0];
+  const id = (CAT_WORDS.find(([, re]) => re.test(n)) || ['comida'])[0];
+  return catById(id) ? id : (catById('comida') ? 'comida' : S.shopcats[0]?.id || OTROS.id);
 }
 const prettyName = s => String(s).toLowerCase().replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
 
@@ -791,5 +935,5 @@ document.addEventListener('change', e => {
 });
 
 // En modo nube esto corre al llegar los datos compartidos (ver listen).
-if (!cloud && ensureFixedBills()) cache();
+if (!cloud) { const a = ensureFixedBills(), b = ensureShopCats(); if (a || b) cache(); }
 render();

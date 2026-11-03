@@ -146,6 +146,18 @@ o editarlo), y los productos pasan a Compras → "Hay en casa" (los que estaban 
 
 ## Aviso de pago
 
-Al marcar un recibo como pagado (con su comprobante), la app llama a `api/paid-notice.js` con el token de sesión de
+Al marcar un recibo como pagado (con su comprobante), la app llama a `api/notice.js` con el token de sesión de
 Firebase. La función verifica el usuario, lee el recibo en Firestore y avisa por Telegram y Discord:
 "✅ Camilo ya pagó el servicio de 🌐 Internet (octubre de 2026): $ 44.950".
+
+## Compras: secciones y lista tipo recibo
+
+Las secciones de Compras (Comida, Baños, Cuarto principal, Oficina, Lavandería, Limpieza, Muebles y/o accesorios)
+se guardan en Firestore (`homes/main/data/shopcats`) y se pueden renombrar, cambiar de ícono (✎ Sección), crear
+("Nueva sección") o eliminar (sus productos pasan a "Otros"). Agregar a mano siempre crea el producto como **Falta**;
+lo que hay en casa llega al escanear una factura.
+
+**🧾 Lista de compras** (en Compras o tocando "Compras pendientes" en el Resumen): se marcan las secciones a incluir
+y se genera una lista estilo recibo con cantidades y total estimado, que se puede copiar o compartir.
+
+Cuando alguien agrega que falta algo (o pasa un producto a Falta), `api/notice.js` avisa por Telegram y Discord.

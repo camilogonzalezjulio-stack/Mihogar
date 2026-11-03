@@ -141,6 +141,43 @@ button.badge:hover { filter: brightness(.95); }
 .avatar.sm { width: 26px; height: 26px; font-size: 12px; }
 .tabs button.active .avatar { background: rgba(255, 255, 255, .25); }
 
+/* ---------- Lista de compras tipo recibo ---------- */
+.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.clickable:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(16, 163, 108, .15); }
+.tile-add { border-style: dashed; opacity: .85; }
+.pick-list { display: grid; gap: 6px; margin-top: 12px; max-height: 50vh; overflow: auto; }
+.pick {
+  display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 12px; border: 1.5px solid var(--line);
+  border-radius: 12px; color: var(--text); font-size: 15px; cursor: pointer;
+}
+.pick:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.pick.empty-cat { opacity: .6; }
+.pick-icon { font-size: 20px; }
+.receipt {
+  max-width: 340px; margin: 0 auto; padding: 26px 20px 18px; color: #161616; letter-spacing: .02em;
+  font: 13px/1.45 'Courier New', ui-monospace, Menlo, monospace;
+  background:
+    radial-gradient(120% 60% at 20% 10%, rgba(255,255,255,.9), transparent 60%),
+    linear-gradient(115deg, transparent 40%, rgba(0,0,0,.035) 41%, transparent 43%),
+    linear-gradient(65deg, transparent 60%, rgba(0,0,0,.03) 61%, transparent 63%),
+    linear-gradient(160deg, transparent 25%, rgba(0,0,0,.025) 26%, transparent 28%),
+    #f3f3f1;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18); border-radius: 2px;
+}
+.r-title { font: 900 30px/1 'Plus Jakarta Sans', Arial Black, sans-serif; text-align: center; letter-spacing: -.01em; }
+.r-sub { text-align: center; margin: 6px 0 14px; }
+.r-meta { margin: 6px 0; }
+.r-line { border-top: 1.5px dashed #333; margin: 6px 0; }
+.r-row { display: grid; grid-template-columns: 38px 1fr auto; gap: 8px; padding: 2px 0; }
+.r-row span:last-child { text-align: right; white-space: nowrap; }
+.r-head { font-weight: 700; }
+.r-cat { margin: 10px 0 2px; font-weight: 700; }
+.r-sum span:nth-child(2) { font-weight: 700; }
+.r-empty { text-align: center; padding: 14px 0; }
+.r-thanks { text-align: center; margin: 14px 0 10px; }
+.r-barcode { display: block; width: 100%; height: 44px; fill: #111; }
+.r-foot { text-align: center; margin-top: 4px; font-size: 12px; }
+
 /* ---------- Visor de imágenes ---------- */
 dialog#viewer {
   width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0;

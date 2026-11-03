@@ -20,12 +20,13 @@ Copia `.env.example` a `.env` y llena los valores de tu app web de Firebase
 > Las variables `VITE_*` se incluyen en el JS publicado: la config de Firebase **no es secreta** por diseño.
 > Lo que protege los datos es el inicio de sesión y las reglas de `firestore.rules`.
 
-## Firebase (una sola vez)
+## Firebase
 
-1. Crea un proyecto en https://console.firebase.google.com (sin Analytics).
-2. **Firestore Database > Crear base de datos** (modo producción, p. ej. `southamerica-east1`).
-3. **Authentication > Comenzar > Correo electrónico/contraseña > Habilitar**.
-4. **Authentication > Usuarios > Agregar usuario**, uno por persona:
+Proyecto **`mihogar-6e6c6`** (plan Spark): Firestore en `nam5`, Auth con correo/contraseña
+(registro y borrado de cuentas desde la app desactivados) y las reglas de `firestore.rules` publicadas.
+Si cambias `firestore.rules`, pégalas en Firestore → Reglas → Publicar, o usa `npm run deploy:rules`.
+
+**Usuarios:** Authentication > Usuarios > Agregar usuario, uno por persona:
    | Usuario en la app | Correo en Firebase    |
    |-------------------|-----------------------|
    | camilo            | `camilo@mihogar.test` |
@@ -34,30 +35,19 @@ Copia `.env.example` a `.env` y llena los valores de tu app web de Firebase
 
 ## Publicar (Vercel)
 
-La app está en **https://mihogar-six.vercel.app** (proyecto `boff2/mihogar`, ya vinculado en `.vercel/`).
+La app está en **https://mihogar-orcin.vercel.app** (equipo `mojon` de Vercel), conectada al repositorio
+`camilogonzalezjulio-stack/Mihogar`: cada push a `main` publica solo.
 
 ```bash
 npm run deploy
 ```
 
-Compila y publica en producción. Vercel no recibe el `.env` (ver `.vercelignore`): las variables `VITE_*`
-se cargan una vez en el proyecto de Vercel:
+(equivale a `git push`). Vercel no recibe el `.env` (ver `.vercelignore`): las variables `VITE_*` se cargan
+una vez en Vercel → mihogar → Settings → Environment Variables (se puede pegar el `.env` completo) y luego
+se vuelve a publicar.
 
-```bash
-vercel env add VITE_FIREBASE_API_KEY production
-```
-
-(repetir por cada variable de `.env.example`, luego `npm run deploy`). También se pueden poner en
-Vercel → Project → Settings → Environment Variables.
-
-Las reglas de Firestore se publican aparte, con Firebase CLI:
-
-```bash
-npm install -g firebase-tools
-firebase login
-firebase use --add
-npm run deploy:rules
-```
+Para publicar reglas desde la terminal (opcional): `npm install -g firebase-tools`, `firebase login`,
+`firebase use mihogar-6e6c6`, `npm run deploy:rules`.
 
 ## Recordatorios de servicios sin pagar (Telegram y Discord)
 

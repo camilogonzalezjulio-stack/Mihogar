@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "vercel deploy --prod",
+    "deploy": "git push",
     "notify": "node --env-file-if-exists=.env scripts/notify-unpaid.mjs",
     "deploy:rules": "firebase deploy --only firestore:rules"
   },

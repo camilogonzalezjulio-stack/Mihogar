@@ -83,3 +83,19 @@ Notas:
 
 Prueba local (sin enviar nada): `NOTIFY_FORCE=1 NOTIFY_DRY_RUN=1 NOTIFY_DATA_FILE=respaldo.json npm run notify`,
 usando un archivo descargado con el botón "Respaldo" de la app.
+
+## Facturas automáticas desde Gmail
+
+`scripts/gmail-a-mihogar.gs` es un Google Apps Script que corre gratis en tu cuenta de Gmail cada hora: busca
+correos de **Air-e, Gases del Caribe, Triple A y Claro**, lee el valor a pagar (y la fecha límite si aparece) y lo
+envía a `api/ingest-bill.js`, que lo registra como **pendiente** en Luz, Gas, Agua o Internet del mes en que llegó
+el correo. Si ese recibo ya está marcado como pagado no lo toca; si ya existe y está pendiente, actualiza el valor.
+
+Instalación:
+1. https://script.google.com (con la cuenta donde llegan las facturas) → **Nuevo proyecto**.
+2. Pega todo `scripts/gmail-a-mihogar.gs` y en `CONFIG.secret` pon el mismo valor de `CRON_SECRET` de Vercel.
+3. Guarda, elige la función **`instalar`** → ▶ Ejecutar → acepta los permisos de Gmail.
+
+En Gmail quedan etiquetas: **MiHogar/registrado** (leído y guardado) y **MiHogar/revisar** (no se encontró el
+valor o no hay servicio que corresponda). Si una empresa escribe desde otro correo, agrégalo en `EMPRESAS`.
+Requiere `FIREBASE_SERVICE_ACCOUNT` en Vercel.

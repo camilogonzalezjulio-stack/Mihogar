@@ -34,12 +34,8 @@ function today() {
 
 async function loadHome() {
   if (env.NOTIFY_DATA_FILE) return JSON.parse(await readFile(env.NOTIFY_DATA_FILE, 'utf8'));
-  if (!env.FIREBASE_SERVICE_ACCOUNT) throw new Error('Falta FIREBASE_SERVICE_ACCOUNT');
-  const { initializeApp, getApps, cert } = await import('firebase-admin/app');
-  const { getFirestore } = await import('firebase-admin/firestore');
-  // En Vercel la misma instancia atiende varias ejecuciones: inicializar solo una vez.
-  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT)) });
-  const snap = await getFirestore().collection('homes/main/data').get();
+  const { db } = await import('../lib/admin.mjs');
+  const snap = await db().collection('homes/main/data').get();
   const home = {};
   snap.forEach(d => { home[d.id] = d.data().items; });
   return home;

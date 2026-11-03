@@ -124,3 +124,14 @@ direcciones → acción **Redirigir a** (no "Reenviar") el Gmail del script.
 
 Un servicio puede tener **valor fijo mensual** (✎ en el servicio). Cada mes la app crea sola el recibo
 pendiente con ese valor, y los recordatorios lo incluyen. **Administración** viene con $454.000.
+
+## Comprobante de pago
+
+Un recibo solo se puede marcar como **pagado** subiendo el **comprobante de pago** (foto o PDF): al marcar la
+casilla se pide el archivo, y en el formulario de editar "Ya está pagado" no se guarda sin él. El comprobante se
+ve con 🧾 en el recibo. Se guarda en Firestore como `homes/main/receipts/pago-<id del recibo>`.
+
+## Aviso al llegar una factura
+
+Cuando el script de Gmail registra una factura nueva (o cambia su valor), `api/ingest-bill.js` manda de inmediato
+un mensaje a Telegram y Discord con el servicio, el mes, el valor y la fecha límite.

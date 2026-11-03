@@ -145,6 +145,21 @@ async function getReceipt(id) {
 async function delReceipt(id) {
   try { if (inCloud()) await deleteDoc(rDoc(id)); else localStorage.removeItem(rKey(id)); } catch { /* ya no existía */ }
 }
+// El comprobante de pago se guarda igual que la foto del recibo, con su propio id.
+const proofKey = billId => 'pago-' + billId;
+
+// Imagen → JPEG comprimido; PDF → tal cual si cabe en un documento de Firestore (< ~650 KB).
+async function toStored(file) {
+  if (file.type === 'application/pdf') {
+    const data = await new Promise((res, rej) => {
+      const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error('No se pudo leer el PDF')); r.readAsDataURL(file);
+    });
+    if (data.length > 900000) throw new Error('El PDF pesa demasiado; sube una foto o captura del comprobante');
+    return data;
+  }
+  return compress(file);
+}
+
 function compress(file) {
   return new Promise((res, rej) => {
     const url = URL.createObjectURL(file), img = new Image();
@@ -175,7 +190,7 @@ function openForm(title, fields, onSubmit, onDelete) {
       return `<label>${x.label}<select name="${x.name}">${x.options.map(o => `<option value="${esc(o.v)}" ${o.v == v ? 'selected' : ''}>${esc(o.t)}</option>`).join('')}</select></label>`;
     if (x.type === 'checkbox')
       return `<label class="row"><input type="checkbox" name="${x.name}" ${v ? 'checked' : ''}> ${x.label}</label>`;
-    return `<label>${x.label}<input name="${x.name}" type="${x.type || 'text'}" value="${esc(v)}" ${req} ${x.type === 'number' ? 'min="0" step="any"' : ''} ${x.type === 'file' ? 'accept="image/*"' : ''}></label>`;
+    return `<label>${x.label}<input name="${x.name}" type="${x.type || 'text'}" value="${esc(v)}" ${req} ${x.type === 'number' ? 'min="0" step="any"' : ''} ${x.type === 'file' ? `accept="${x.accept || 'image/*'}"` : ''}></label>`;
   }).join('') + `<div class="actions">
     ${onDelete ? '<button type="button" class="ghost danger" id="f-del">Eliminar</button><span class="grow"></span>' : ''}
     <button type="button" class="ghost" id="f-cancel">Cancelar</button>
@@ -248,6 +263,7 @@ function vServicios() {
         <span class="grow"><b>${money(b.amount)}</b> <span class="badge ${b.paid ? 'paid' : 'pend'}">${b.paid ? 'Pagado' : 'Pendiente'}</span>
           <br><span class="muted">${b.due ? 'Vence ' + b.due : ''} ${esc(b.note)}</span></span>
         ${b.receipt ? `<button class="icon" data-act="bill-photo" data-id="${b.id}" title="Ver recibo">📎</button>` : ''}
+        ${b.proof ? `<button class="icon" data-act="bill-proof" data-id="${b.id}" title="Ver comprobante de pago">🧾</button>` : ''}
         <button class="icon" data-act="bill-edit" data-id="${b.id}">✎</button></div>`).join('')
         || '<div class="muted" style="margin-top:8px">Sin registro este mes</div>'}
     </div>`;
@@ -416,7 +432,14 @@ const A = {
   'bill-add'(id) { billForm({ serviceId: id, month: ui.month, amount: '', due: '', note: '', paid: false }, true); },
   'bill-edit'(id) { billForm(find(S.bills, id), false); },
   'bill-photo'(id) { showReceipt(find(S.bills, id)); },
-  'bill-paid'(id, el) { find(S.bills, id).paid = el.checked; save(); },
+  'bill-proof'(id) { showReceipt(find(S.bills, id), true); },
+  // Solo se marca como pagado con comprobante: si no lo tiene, se pide antes de cambiar el estado.
+  'bill-paid'(id, el) {
+    const b = find(S.bills, id);
+    if (el.checked && !b.proof) { el.checked = false; proofForm(b); return; }
+    if (!el.checked && !confirm('¿Marcar este recibo como pendiente otra vez?')) { el.checked = true; return; }
+    b.paid = el.checked; save();
+  },
 
   'buy-add'(cat) { buyForm({ name: '', qty: 1, price: '', category: cat || SHOP_CATS[0][0] }, true); },
   'buy-edit'(id) { buyForm(find(S.shopping, id), false); },
@@ -462,12 +485,21 @@ function billForm(b, isNew) {
     { name: 'amount', label: 'Valor', type: 'number', value: b.amount },
     { name: 'due', label: 'Fecha de vencimiento', type: 'date', value: b.due, required: false },
     { name: 'note', label: 'Nota', value: b.note, required: false },
-    { name: 'paid', label: 'Ya está pagado', type: 'checkbox', value: b.paid },
+    { name: 'paid', label: 'Ya está pagado (requiere comprobante)', type: 'checkbox', value: b.paid },
+    { name: 'proofFile', label: b.proof ? 'Reemplazar comprobante de pago' : 'Comprobante de pago (foto o PDF)', type: 'file', accept: PROOF_ACCEPT, required: false },
     { name: 'photo', label: b.receipt ? 'Reemplazar foto del recibo' : 'Foto del recibo', type: 'file', required: false },
     ...(b.receipt ? [{ name: 'rmPhoto', label: 'Quitar la foto actual', type: 'checkbox', value: false }] : []),
   ], async v => {
-    const { photo, rmPhoto, ...data } = v;
+    const { photo, rmPhoto, proofFile, ...data } = v;
     const rec = isNew ? { id: uid(), ...b } : b;
+    try {
+      if (proofFile) { await putReceipt(proofKey(rec.id), await toStored(proofFile)); rec.proof = true; }
+    } catch (e) { alert('No se pudo guardar el comprobante: ' + e.message); }
+    if (data.paid && !rec.proof) {
+      alert('Para marcarlo como pagado tienes que subir el comprobante de pago. Quedó como pendiente.');
+      data.paid = false;
+    }
+    if (data.paid && !rec.paid) data.paidAt = today();
     Object.assign(rec, data);
     try {
       if (photo) { await putReceipt(rec.id, await compress(photo)); rec.receipt = true; }
@@ -476,18 +508,39 @@ function billForm(b, isNew) {
     if (isNew) S.bills.push(rec);
     save();
   },
-  isNew ? null : () => { delReceipt(b.id); S.bills = S.bills.filter(x => x.id !== b.id); save(); });
+  isNew ? null : () => { delReceipt(b.id); delReceipt(proofKey(b.id)); S.bills = S.bills.filter(x => x.id !== b.id); save(); });
 }
 
-async function showReceipt(b) {
+const PROOF_ACCEPT = 'image/*,application/pdf';
+
+// Pide el comprobante y, al subirlo, marca el recibo como pagado.
+function proofForm(b) {
+  openForm(`Comprobante de pago · ${svc(b.serviceId)?.name} · ${monthLabel(b.month)}`, [
+    { name: 'proofFile', label: 'Sube la foto o PDF del comprobante para marcarlo como pagado', type: 'file', accept: PROOF_ACCEPT },
+  ], async v => {
+    if (!v.proofFile) return;
+    try {
+      await putReceipt(proofKey(b.id), await toStored(v.proofFile));
+      Object.assign(b, { proof: true, paid: true, paidAt: today() });
+      save();
+    } catch (e) { alert('No se pudo guardar el comprobante: ' + e.message); }
+  });
+}
+
+async function showReceipt(b, proof = false) {
   const f = $('#dlg-form'), dlg = $('#dlg');
-  f.innerHTML = `<h2>Recibo · ${esc(svc(b.serviceId)?.name)} · ${monthLabel(b.month)}</h2><div class="empty" id="r-img">Cargando…</div>
+  f.innerHTML = `<h2>${proof ? 'Comprobante de pago' : 'Recibo'} · ${esc(svc(b.serviceId)?.name)} · ${monthLabel(b.month)}</h2>
+    ${proof && b.paidAt ? `<div class="muted">Pagado el ${b.paidAt}</div>` : ''}<div class="empty" id="r-img">Cargando…</div>
     <div class="actions"><button class="btn" value="ok">Cerrar</button></div>`;
   f.onsubmit = e => { e.preventDefault(); dlg.close(); };
   dlg.showModal();
   try {
-    const data = await getReceipt(b.id);
-    $('#r-img').outerHTML = data ? `<a href="${data}" target="_blank"><img src="${data}" alt="Recibo" style="width:100%;border-radius:8px"></a>` : '<div class="empty">No se encontró la foto</div>';
+    const data = await getReceipt(proof ? proofKey(b.id) : b.id);
+    $('#r-img').outerHTML = !data ? '<div class="empty">No se encontró el archivo</div>'
+      : data.startsWith('data:application/pdf')
+        ? `<embed src="${data}" type="application/pdf" style="width:100%;height:60vh;border-radius:8px">
+           <a class="ghost sm" href="${data}" download="comprobante.pdf">Descargar PDF</a>`
+        : `<a href="${data}" target="_blank"><img src="${data}" alt="${proof ? 'Comprobante' : 'Recibo'}" style="width:100%;border-radius:8px"></a>`;
   } catch (e) { $('#r-img').textContent = 'Error: ' + e.message; }
 }
 

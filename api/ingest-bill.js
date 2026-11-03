@@ -7,6 +7,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '../lib/admin.mjs';
 import { PROVIDERS, applyBill } from '../lib/bills.mjs';
+import { send } from '../lib/notify.mjs';
 
 // SHA-256 de los correos de Google que pueden registrar facturas (en hash para no publicar el correo en el repo).
 // Se puede reemplazar con la variable INGEST_GOOGLE_EMAILS="correo1,correo2".
@@ -41,6 +42,19 @@ async function googleEmail(token) {
   return email ? { email } : { error: 'Gmail no devolvió el correo' };
 }
 
+const money = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n || 0);
+const monthName = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }); };
+
+export function arrivalMessage({ action, service, bill }, p) {
+  return [
+    `📩 ${action === 'actualizado' ? 'Se actualizó la factura' : 'Llegó la factura'} de ${PROVIDERS[p.provider].label}`,
+    `${service.icon || '📌'} ${service.name} (${monthName(bill.month)}): ${money(bill.amount)}`,
+    bill.due ? `📅 Fecha límite: ${bill.due}` : '',
+    'Quedó como pendiente en MiHogar. Para marcarla como pagada sube el comprobante.',
+    process.env.APP_URL || '',
+  ].filter(Boolean).join('\n');
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' });
   const motivo = await rejection(req);
@@ -64,8 +78,14 @@ export default async function handler(req, res) {
       if (out.changed) t.set(col.doc('bills'), { items: out.bills });
       return out;
     });
+    // Aviso inmediato solo cuando la factura es nueva o cambió el valor (no en duplicados ni recibos ya pagados).
+    let avisado = false;
+    if (r.changed) {
+      try { avisado = (await send(arrivalMessage(r, p))).sent.length > 0; }
+      catch (e) { console.error('Aviso de factura:', e.message); }
+    }
     res.status(r.action === 'sin-servicio' ? 422 : 200)
-      .json({ accion: r.action, servicio: r.service?.name || null, valor: r.bill?.amount ?? null, mes: p.month });
+      .json({ accion: r.action, servicio: r.service?.name || null, valor: r.bill?.amount ?? null, mes: p.month, avisado });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

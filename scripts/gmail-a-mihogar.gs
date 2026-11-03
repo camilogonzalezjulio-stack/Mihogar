@@ -29,17 +29,18 @@ const ETIQUETA_OK = 'MiHogar/registrado';
 const ETIQUETA_REVISAR = 'MiHogar/revisar';
 const ETIQUETA_IGNORADO = 'MiHogar/ignorado';
 
-const soloDigitos = s => String(s || '').replace(/\D/g, '');
-/** ¿El texto trae el número de cuenta? Acepta espacios, puntos o guiones en medio ("6676845-5"). */
-function traeCuenta(texto, cuenta) {
-  return texto.replace(/[\s.\-]/g, '').includes(soloDigitos(cuenta));
-}
-
 function instalar() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   // Cada 5 minutos: casi inmediato y dentro del límite diario gratis de Apps Script (~90 min de ejecución).
   ScriptApp.newTrigger('revisarCorreo').timeBased().everyMinutes(5).create();
   reintentarRevisar(); // también vuelve a intentar los que quedaron en "MiHogar/revisar"
+}
+
+
+const soloDigitos = s => String(s || '').replace(/\D/g, '');
+/** ¿El texto trae el número de cuenta? Acepta espacios, puntos o guiones en medio ("6676845-5"). */
+function traeCuenta(texto, cuenta) {
+  return texto.replace(/[\s.\-]/g, '').includes(soloDigitos(cuenta));
 }
 
 function revisarCorreo() {
@@ -133,14 +134,17 @@ function periodo(fechaISO) {
 
 /** "$ 85.430" / "85.430,00" / "$85,430" → 85430. Devuelve 0 si no encuentra un valor a pagar. */
 function leerValor(texto) {
+  // Un valor es "$ 12345" o un número con separador de miles; así no se toman números de cupón, póliza o teléfono.
+  const DINERO = '(?:\\$\\s*(\\d[\\d.,]*)|(\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{2})?))';
   const patrones = [
-    /total\s+factura\s+a\s+pagar[^\d$]{0,40}\$?\s*([\d][\d.,]*)/i, // Triple A: antes que su "cupo disponible"
-    /(?:total\s+a\s+pagar|valor\s+a\s+pagar|total\s+factura|valor\s+total|monto\s+a\s+pagar|saldo\s+a\s+pagar|pago\s+total)[^\d$]{0,40}\$?\s*([\d][\d.,]*)/i,
+    // Triple A: después de "Total factura a pagar" viene el número de cupón y el valor va unas líneas abajo.
+    new RegExp('total\\s+factura\\s+a\\s+pagar[\\s\\S]{0,120}?' + DINERO, 'i'),
+    new RegExp('(?:total\\s+a\\s+pagar|valor\\s+a\\s+pagar|total\\s+factura|valor\\s+total|monto\\s+a\\s+pagar|saldo\\s+a\\s+pagar|pago\\s+total)[^\\d$]{0,40}' + DINERO, 'i'),
     /\$\s*([\d]{1,3}(?:[.,]\d{3})+(?:[.,]\d{2})?)/,
   ];
   for (const re of patrones) {
     const m = texto.match(re);
-    if (m) { const n = aNumero(m[1]); if (n >= 1000) return n; }
+    if (m) { const n = aNumero(m[1] || m[2]); if (n >= 1000) return n; }
   }
   return 0;
 }

@@ -12,36 +12,37 @@ import { PROVIDERS, applyBill } from '../lib/bills.mjs';
 const ALLOWED_EMAIL_HASHES = ['884cad76e80a884bcd73663146fe94996e3836d6fbbc9cebfc59519b3e34d3f8'];
 const sha = s => createHash('sha256').update(String(s).trim().toLowerCase()).digest('hex');
 
-async function authorized(req) {
+// Devuelve null si está autorizado, o el motivo del rechazo (sin datos sensibles).
+async function rejection(req) {
   const secret = process.env.INGEST_SECRET || process.env.CRON_SECRET;
-  if (secret && req.headers.authorization === `Bearer ${secret}`) return true;
+  if (secret && req.headers.authorization === `Bearer ${secret}`) return null;
   const token = req.headers['x-google-token'];
-  if (!token) { console.warn('ingest: sin X-Google-Token. Cabeceras:', Object.keys(req.headers).join(',')); return false; }
-  const email = await googleEmail(token);
-  if (!email) { console.warn('ingest: Google no devolvió un correo verificado para el token'); return false; }
+  if (!token) return 'falta X-Google-Token';
+  const r = await googleEmail(token);
+  if (r.error) return r.error;
   const allowed = process.env.INGEST_GOOGLE_EMAILS
     ? process.env.INGEST_GOOGLE_EMAILS.split(',').map(sha)
     : ALLOWED_EMAIL_HASHES;
-  const ok = allowed.includes(sha(email));
-  if (!ok) console.warn('ingest: cuenta no permitida (hash ' + sha(email).slice(0, 8) + ')');
-  return ok;
+  return allowed.includes(sha(r.email)) ? null : 'cuenta de Google no permitida';
 }
 
 // Correo dueño del token. El token del Apps Script no siempre trae el correo (solo si el permiso de correo
 // está declarado), así que si falta se pregunta a Gmail, que el script sí tiene permitido.
 async function googleEmail(token) {
   const info = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token));
-  if (!info.ok) { console.warn('ingest: tokeninfo respondió', info.status); return null; }
+  if (!info.ok) return { error: `tokeninfo respondió ${info.status}` };
   const i = await info.json();
-  if (i.email && String(i.email_verified) === 'true') return i.email;
+  if (i.email && String(i.email_verified) === 'true') return { email: i.email };
   const p = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: `Bearer ${token}` } });
-  if (!p.ok) return null;
-  return (await p.json()).emailAddress || null;
+  if (!p.ok) return { error: `el token no trae correo y Gmail respondió ${p.status}` };
+  const email = (await p.json()).emailAddress;
+  return email ? { email } : { error: 'Gmail no devolvió el correo' };
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' });
-  if (!(await authorized(req))) return res.status(401).json({ error: 'No autorizado' });
+  const motivo = await rejection(req);
+  if (motivo) return res.status(401).json({ error: 'No autorizado', motivo });
 
   let p;
   try { p = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}; }

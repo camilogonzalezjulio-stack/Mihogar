@@ -135,3 +135,11 @@ ve con 🧾 en el recibo. Se guarda en Firestore como `homes/main/receipts/pago-
 
 Cuando el script de Gmail registra una factura nueva (o cambia su valor), `api/ingest-bill.js` manda de inmediato
 un mensaje a Telegram y Discord con el servicio, el mes, el valor y la fecha límite.
+
+## Escanear factura (OCR)
+
+En **Finanzas → 📷 Escanear factura** se toma o elige la foto de un tiquete. `ocr.js` la lee con **Tesseract.js**
+dentro del navegador (la foto no se envía a ningún servicio; la primera vez descarga el lector en español, ~2 MB),
+detecta tienda, fecha, productos con precio y total, y abre una pantalla **editable** para corregir, agregar o quitar
+productos antes de guardar. Se guarda como **un egreso** de la persona con el detalle de productos (🧾 para verlo
+o editarlo). La lectura no es perfecta en tiquetes borrosos o arrugados: por eso siempre se revisa antes de guardar.

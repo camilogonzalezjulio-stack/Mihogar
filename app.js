@@ -183,6 +183,7 @@ function compress(file) {
 /* ---------- Formulario modal genérico ---------- */
 function openForm(title, fields, onSubmit, onDelete) {
   const f = $('#dlg-form');
+  f.oninput = f.onclick = null; // los pone reviewReceipt; no deben quedar en otros formularios
   f.innerHTML = `<h2>${esc(title)}</h2>` + fields.map(x => {
     const v = x.value ?? '';
     const req = x.required === false ? '' : 'required';
@@ -364,10 +365,12 @@ function vFinanzas() {
     <div class="grid two" style="margin-top:16px">
       <div class="card"><div class="row between"><h3>Movimientos</h3>
         <span><button class="btn sm" data-act="tx-add" data-type="in">+ Ingreso</button>
-        <button class="btn sm red" data-act="tx-add" data-type="out">+ Egreso</button></span></div>
+        <button class="btn sm red" data-act="tx-add" data-type="out">+ Egreso</button>
+        <button class="btn sm" data-act="tx-scan" title="Leer una factura con la cámara">📷 Escanear factura</button></span></div>
         ${list.map(x => `<div class="item"><span>${x.type === 'in' ? '🟢' : '🔴'}</span>
-          <span class="grow">${esc(x.desc) || esc(x.category) || (x.type === 'in' ? 'Ingreso' : 'Egreso')}<br><span class="muted">${x.date}${x.category ? ' · ' + esc(x.category) : ''}</span></span>
+          <span class="grow">${esc(x.desc) || esc(x.category) || (x.type === 'in' ? 'Ingreso' : 'Egreso')}<br><span class="muted">${x.date}${x.category ? ' · ' + esc(x.category) : ''}${x.items?.length ? ` · ${x.items.length} productos` : ''}</span></span>
           <b class="${x.type === 'in' ? 'ok' : 'bad'}">${x.type === 'in' ? '+' : '−'}${money(x.amount)}</b>
+          ${x.items ? `<button class="icon" data-act="tx-items" data-id="${x.id}" title="Ver y editar productos">🧾</button>` : ''}
           <button class="icon" data-act="tx-edit" data-id="${x.id}">✎</button></div>`).join('')
           || '<div class="empty">Sin movimientos este mes</div>'}</div>
       <div class="card"><h3 style="margin-bottom:8px">Egresos por categoría</h3>
@@ -464,6 +467,12 @@ const A = {
   'shop-back'() { ui.shopCat = null; render(); },
   'tx-add'(_, el) { txForm({ personId: ui.personId, type: el.dataset.type, amount: '', category: '', date: today(), desc: '' }, true); },
   'tx-edit'(id) { txForm(find(S.tx, id), false); },
+  'tx-items'(id) { reviewReceipt(find(S.tx, id)); },
+  'tx-scan'() {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
+    input.onchange = () => input.files[0] && scanReceipt(input.files[0]);
+    input.click();
+  },
 };
 
 // Firebase Auth trabaja con correos: el usuario "camilo" se guarda como camilo@USER_DOMAIN.
@@ -529,6 +538,7 @@ function proofForm(b) {
 
 async function showReceipt(b, proof = false) {
   const f = $('#dlg-form'), dlg = $('#dlg');
+  f.oninput = f.onclick = null;
   f.innerHTML = `<h2>${proof ? 'Comprobante de pago' : 'Recibo'} · ${esc(svc(b.serviceId)?.name)} · ${monthLabel(b.month)}</h2>
     ${proof && b.paidAt ? `<div class="muted">Pagado el ${b.paidAt}</div>` : ''}<div class="empty" id="r-img">Cargando…</div>
     <div class="actions"><button class="btn" value="ok">Cerrar</button></div>`;
@@ -569,6 +579,85 @@ function txForm(t, isNew) {
     { name: 'desc', label: 'Descripción', value: t.desc, required: false },
   ], v => { Object.assign(t, v); if (isNew) S.tx.push({ id: uid(), ...t }); save(); },
   isNew ? null : () => { S.tx = S.tx.filter(x => x.id !== t.id); save(); });
+}
+
+/* ---------- Escanear factura (OCR) ---------- */
+async function scanReceipt(file) {
+  const f = $('#dlg-form'), dlg = $('#dlg');
+  f.oninput = f.onclick = null;
+  f.innerHTML = `<h2>📷 Leyendo factura…</h2><div class="muted" id="ocr-st">Preparando (la primera vez descarga el lector, ~2 MB)</div>
+    <span class="progress" style="margin-top:12px"><i id="ocr-bar" style="width:0"></i></span>`;
+  f.onsubmit = e => e.preventDefault();
+  dlg.showModal();
+  try {
+    const { readImage, parseReceipt } = await import('./ocr.js');
+    const text = await readImage(file, p => {
+      $('#ocr-st').textContent = `Leyendo texto… ${Math.round(p * 100)}%`;
+      $('#ocr-bar').style.width = `${p * 100}%`;
+    });
+    const r = parseReceipt(text);
+    reviewReceipt({ personId: ui.personId, type: 'out', category: 'Mercado', desc: r.store, date: r.date || today(), amount: r.total, items: r.items }, true);
+  } catch (e) {
+    f.innerHTML = `<h2>No se pudo leer la factura</h2><div class="muted">${esc(e.message)}</div>
+      <div class="actions"><button class="btn" value="ok">Cerrar</button></div>`;
+    f.onsubmit = ev => { ev.preventDefault(); dlg.close(); };
+  }
+}
+
+// Pantalla editable con lo que leyó el OCR (o un egreso ya guardado con productos).
+function reviewReceipt(t, isNew = false) {
+  const f = $('#dlg-form'), dlg = $('#dlg');
+  let items = (t.items || []).map(i => ({ ...i }));
+  let totalManual = !isNew; // en uno ya guardado se respeta el total; en uno nuevo se suma solo
+  const row = (i, n) => `<div class="row" style="gap:6px;margin-top:6px">
+      <input data-i="${n}" data-k="name" value="${esc(i.name)}" placeholder="Producto" style="flex:1;margin:0">
+      <input data-i="${n}" data-k="price" type="number" min="0" value="${i.price}" style="width:110px;margin:0">
+      <button type="button" class="icon" data-rm="${n}" title="Quitar">✕</button></div>`;
+  const draw = () => {
+    f.innerHTML = `<h2>🧾 ${isNew ? 'Revisa la factura' : 'Productos de la compra'}</h2>
+      ${isNew ? '<div class="muted">Corrige lo que el lector haya leído mal antes de guardar.</div>' : ''}
+      <label>Tienda / descripción<input name="desc" value="${esc(t.desc)}"></label>
+      <div class="row" style="gap:10px"><label style="flex:1">Fecha<input name="date" type="date" value="${t.date}"></label>
+        <label style="flex:1">Categoría<input name="category" value="${esc(t.category)}"></label></div>
+      <label>Persona<select name="personId">${S.people.map(p => `<option value="${p.id}" ${p.id === t.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+      <div class="section-label" style="margin-top:16px">Productos (${items.length})</div>
+      <div id="rows">${items.map(row).join('') || '<div class="muted">No se detectaron productos; agrégalos o deja solo el total.</div>'}</div>
+      <button type="button" class="ghost sm" id="add-row" style="margin-top:8px">+ Agregar producto</button>
+      <label>Total<input name="amount" type="number" min="0" required value="${t.amount || ''}"></label>
+      <div class="muted" id="sum"></div>
+      <div class="actions"><button type="button" class="ghost" id="r-cancel">Cancelar</button><button class="btn">Guardar egreso</button></div>`;
+    showSum();
+  };
+  const sum = () => items.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  const showSum = () => { $('#sum').textContent = items.length ? `Suma de productos: ${money(sum())}` : ''; };
+  f.oninput = e => {
+    const el = e.target;
+    if (el.dataset.i !== undefined) {
+      items[el.dataset.i][el.dataset.k] = el.dataset.k === 'price' ? Number(el.value) : el.value;
+      if (!totalManual) f.elements.amount.value = sum();
+      showSum();
+    } else if (el.name === 'amount') totalManual = true;
+    else if (el.name) t[el.name] = el.value;
+  };
+  f.onclick = e => {
+    const rm = e.target.closest('[data-rm]');
+    if (rm) { syncHeader(); items.splice(Number(rm.dataset.rm), 1); if (!totalManual) t.amount = sum(); draw(); }
+    if (e.target.id === 'add-row') { syncHeader(); items.push({ name: '', price: 0 }); draw(); f.querySelector(`[data-i="${items.length - 1}"][data-k="name"]`).focus(); }
+    if (e.target.id === 'r-cancel') dlg.close();
+  };
+  const syncHeader = () => ['desc', 'date', 'category', 'personId', 'amount'].forEach(k => { t[k] = k === 'amount' ? Number(f.elements[k].value) : f.elements[k].value; });
+  f.onsubmit = e => {
+    e.preventDefault();
+    syncHeader();
+    const rec = isNew ? { id: uid(), type: 'out', ...t } : t;
+    Object.assign(rec, { amount: Number(t.amount) || sum(), items: items.filter(i => i.name.trim() || i.price) });
+    if (isNew) S.tx.push(rec);
+    ui.personId = rec.personId;
+    dlg.close();
+    save();
+  };
+  draw();
+  if (!dlg.open) dlg.showModal();
 }
 
 /* ---------- Eventos ---------- */

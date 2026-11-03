@@ -509,10 +509,12 @@ function billForm(b, isNew) {
       alert('Para marcarlo como pagado tienes que adjuntar el comprobante de pago. Quedó como pendiente.');
       data.paid = false;
     }
-    if (data.paid && !rec.paid) data.paidAt = today();
+    const recienPagado = data.paid && !rec.paid;
+    if (recienPagado) data.paidAt = today();
     Object.assign(rec, data);
     if (isNew) S.bills.push(rec);
     save();
+    if (recienPagado) notifyPaid(rec.id);
   },
   isNew ? null : () => { delReceipt(b.id); delReceipt(proofKey(b.id)); S.bills = S.bills.filter(x => x.id !== b.id); save(); });
 }
@@ -529,8 +531,22 @@ function proofForm(b) {
       await putReceipt(proofKey(b.id), await toStored(v.proofFile));
       Object.assign(b, { proof: true, paid: true, paidAt: today() });
       save();
+      notifyPaid(b.id);
     } catch (e) { alert('No se pudo guardar el comprobante: ' + e.message); }
   });
+}
+
+// Pide a Vercel que avise por Telegram y Discord "X ya pagó el servicio…". Solo con sesión en la nube.
+async function notifyPaid(billId) {
+  if (!inCloud()) return;
+  try {
+    const r = await fetch('/api/paid-notice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + await user.getIdToken() },
+      body: JSON.stringify({ billId }),
+    });
+    if (!r.ok) console.warn('Aviso de pago:', r.status, await r.text());
+  } catch (e) { console.warn('Aviso de pago:', e.message); }
 }
 
 async function showReceipt(b, proof = false) {

@@ -143,3 +143,9 @@ dentro del navegador (la foto no se envía a ningún servicio; la primera vez de
 detecta tienda, fecha, productos con precio y total, y abre una pantalla **editable** para corregir, agregar o quitar
 productos antes de guardar. Se guarda como **un egreso** de quien la escanea (su persona en Finanzas) con el detalle de productos (🧾 para verlo
 o editarlo), y los productos pasan a Compras → "Hay en casa" (los que estaban en Falta se marcan como Hay; los nuevos se crean en Cocina, Nevera, Limpieza o Baños según su nombre). La lectura no es perfecta en tiquetes borrosos o arrugados: por eso siempre se revisa antes de guardar.
+
+## Aviso de pago
+
+Al marcar un recibo como pagado (con su comprobante), la app llama a `api/paid-notice.js` con el token de sesión de
+Firebase. La función verifica el usuario, lee el recibo en Firestore y avisa por Telegram y Discord:
+"✅ Camilo ya pagó el servicio de 🌐 Internet (octubre de 2026): $ 44.950".

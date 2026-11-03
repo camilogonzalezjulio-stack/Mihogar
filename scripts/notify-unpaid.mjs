@@ -93,7 +93,7 @@ function buildMessage({ services = [], bills = [] }, now) {
   const out = [];
   if (overdue.length) {
     out.push(`🚨 ${plural(overdue.length, 'servicio en mora', 'servicios en mora')}`);
-    overdue.forEach(g => out.push(`• ${label(g.s)} (${g.monthLabel}): ${money(g.total)} — ${plural(g.late, 'día', 'días')} de mora`));
+    overdue.forEach(g => out.push(`• Recuerda que el servicio ${label(g.s)} (${g.monthLabel}) falta por pagarse: tienes ${plural(g.late, 'día', 'días')} de mora y está por un valor de ${money(g.total)}`));
   }
   if (grace.length) {
     if (out.length) out.push('');

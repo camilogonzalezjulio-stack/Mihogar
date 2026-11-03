@@ -326,7 +326,8 @@ function vCompras() {
   }).join('');
   return `<div class="head">
     <span><h2 style="margin:0">Compras e inventario</h2><span class="muted">${pend.length} faltan · ${S.shopping.length - pend.length} hay · Estimado ${money(estimate(pend))}</span></span>
-    <button class="btn" data-act="buy-add">+ Agregar</button></div>
+    <span class="row"><button class="btn" data-act="tx-scan" title="Leer una factura con la cámara">📷 Escanear factura</button>
+    <button class="btn" data-act="buy-add">+ Agregar</button></span></div>
     <div class="grid tiles">${tiles}</div>`;
 }
 
@@ -365,8 +366,7 @@ function vFinanzas() {
     <div class="grid two" style="margin-top:16px">
       <div class="card"><div class="row between"><h3>Movimientos</h3>
         <span><button class="btn sm" data-act="tx-add" data-type="in">+ Ingreso</button>
-        <button class="btn sm red" data-act="tx-add" data-type="out">+ Egreso</button>
-        <button class="btn sm" data-act="tx-scan" title="Leer una factura con la cámara">📷 Escanear factura</button></span></div>
+        <button class="btn sm red" data-act="tx-add" data-type="out">+ Egreso</button></span></div>
         ${list.map(x => `<div class="item"><span>${x.type === 'in' ? '🟢' : '🔴'}</span>
           <span class="grow">${esc(x.desc) || esc(x.category) || (x.type === 'in' ? 'Ingreso' : 'Egreso')}<br><span class="muted">${x.date}${x.category ? ' · ' + esc(x.category) : ''}${x.items?.length ? ` · ${x.items.length} productos` : ''}</span></span>
           <b class="${x.type === 'in' ? 'ok' : 'bad'}">${x.type === 'in' ? '+' : '−'}${money(x.amount)}</b>
@@ -469,6 +469,7 @@ const A = {
   'tx-edit'(id) { txForm(find(S.tx, id), false); },
   'tx-items'(id) { reviewReceipt(find(S.tx, id)); },
   'tx-scan'() {
+    if (cloud && !ready.private) return alert('Espera un momento: se están cargando tus finanzas.');
     const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*' });
     input.onchange = () => input.files[0] && scanReceipt(input.files[0]);
     input.click();
@@ -609,6 +610,17 @@ function addToStock(items) {
   return { marked, added };
 }
 
+// Persona de quien escanea: en la nube, la que tiene su nombre de usuario (o la primera de sus finanzas,
+// que son privadas); sin nube, la seleccionada en Finanzas. Si no hay ninguna, se crea.
+function ownPersonId() {
+  const me = cloud ? normName(userName()) : '';
+  const p = (me && S.people.find(x => normName(x.name) === me)) || find(S.people, ui.personId) || S.people[0];
+  if (p) return p.id;
+  const nuevo = { id: uid(), name: userName() || 'Yo' };
+  S.people.push(nuevo);
+  return nuevo.id;
+}
+
 /* ---------- Escanear factura (OCR) ---------- */
 async function scanReceipt(file) {
   const f = $('#dlg-form'), dlg = $('#dlg');
@@ -624,7 +636,7 @@ async function scanReceipt(file) {
       $('#ocr-bar').style.width = `${p * 100}%`;
     });
     const r = parseReceipt(text);
-    reviewReceipt({ personId: ui.personId, type: 'out', category: 'Mercado', desc: r.store, date: r.date || today(), amount: r.total, items: r.items }, true);
+    reviewReceipt({ personId: ownPersonId(), type: 'out', category: 'Mercado', desc: r.store, date: r.date || today(), amount: r.total, items: r.items }, true);
   } catch (e) {
     f.innerHTML = `<h2>No se pudo leer la factura</h2><div class="muted">${esc(e.message)}</div>
       <div class="actions"><button class="btn" value="ok">Cerrar</button></div>`;
@@ -648,7 +660,7 @@ function reviewReceipt(t, isNew = false) {
       <label>Tienda / descripción<input name="desc" value="${esc(t.desc)}"></label>
       <div class="row" style="gap:10px"><label style="flex:1">Fecha<input name="date" type="date" value="${t.date}"></label>
         <label style="flex:1">Categoría<input name="category" value="${esc(t.category)}"></label></div>
-      <label>Persona<select name="personId">${S.people.map(p => `<option value="${p.id}" ${p.id === t.personId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+      <div class="muted" style="margin-top:12px">Egreso de <b>${esc(find(S.people, t.personId)?.name || '')}</b></div>
       <div class="section-label" style="margin-top:16px">Productos (${items.length})</div>
       <div id="rows">${items.map(row).join('') || '<div class="muted">No se detectaron productos; agrégalos o deja solo el total.</div>'}</div>
       <button type="button" class="ghost sm" id="add-row" style="margin-top:8px">+ Agregar producto</button>
@@ -677,7 +689,7 @@ function reviewReceipt(t, isNew = false) {
     if (e.target.id === 'add-row') { syncHeader(); items.push({ name: '', price: 0 }); draw(); f.querySelector(`[data-i="${items.length - 1}"][data-k="name"]`).focus(); }
     if (e.target.id === 'r-cancel') dlg.close();
   };
-  const syncHeader = () => ['desc', 'date', 'category', 'personId', 'amount'].forEach(k => { t[k] = k === 'amount' ? Number(f.elements[k].value) : f.elements[k].value; });
+  const syncHeader = () => ['desc', 'date', 'category', 'amount'].forEach(k => { t[k] = k === 'amount' ? Number(f.elements[k].value) : f.elements[k].value; });
   f.onsubmit = e => {
     e.preventDefault();
     syncHeader();

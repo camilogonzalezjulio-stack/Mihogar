@@ -138,8 +138,8 @@ un mensaje a Telegram y Discord con el servicio, el mes, el valor y la fecha lí
 
 ## Escanear factura (OCR)
 
-En **Finanzas → 📷 Escanear factura** se toma o elige la foto de un tiquete. `ocr.js` la lee con **Tesseract.js**
+En **Compras e inventario → 📷 Escanear factura** se toma o elige la foto de un tiquete. `ocr.js` la lee con **Tesseract.js**
 dentro del navegador (la foto no se envía a ningún servicio; la primera vez descarga el lector en español, ~2 MB),
 detecta tienda, fecha, productos con precio y total, y abre una pantalla **editable** para corregir, agregar o quitar
-productos antes de guardar. Se guarda como **un egreso** de la persona con el detalle de productos (🧾 para verlo
+productos antes de guardar. Se guarda como **un egreso** de quien la escanea (su persona en Finanzas) con el detalle de productos (🧾 para verlo
 o editarlo), y los productos pasan a Compras → "Hay en casa" (los que estaban en Falta se marcan como Hay; los nuevos se crean en Cocina, Nevera, Limpieza o Baños según su nombre). La lectura no es perfecta en tiquetes borrosos o arrugados: por eso siempre se revisa antes de guardar.

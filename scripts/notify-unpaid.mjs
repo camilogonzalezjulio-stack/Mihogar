@@ -77,7 +77,9 @@ function buildMessage({ services = [], bills = [] }, now) {
     for (const s of services) {
       const mine = bills.filter(b => b.serviceId === s.id && b.month === cur);
       if (!mine.length) {
-        if (INCLUDE_UNREGISTERED) current.push(`• ${label(s)}: sin registrar el recibo`);
+        // Valor fijo (p. ej. Administración): se avisa con su valor aunque nadie haya abierto la app este mes.
+        if (s.fixed > 0) current.push(`• ${label(s)}: ${money(s.fixed)}`);
+        else if (INCLUDE_UNREGISTERED) current.push(`• ${label(s)}: sin registrar el recibo`);
         continue;
       }
       const unpaid = mine.filter(b => !b.paid);

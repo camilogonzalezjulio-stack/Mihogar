@@ -99,3 +99,25 @@ Instalación:
 En Gmail quedan etiquetas: **MiHogar/registrado** (leído y guardado) y **MiHogar/revisar** (no se encontró el
 valor o no hay servicio que corresponda). Si una empresa escribe desde otro correo, agrégalo en `EMPRESAS`.
 Requiere `FIREBASE_SERVICE_ACCOUNT` en Vercel.
+
+### Reenviar los recibos a ese Gmail
+
+El script busca por **remitente** (Air-e, Gases del Caribe, Triple A, Claro), así que el reenvío debe ser
+**automático** (conserva el remitente original). Un reenvío manual cambia el remitente y no se detecta.
+
+**Si hoy llegan a otro Gmail:** en ese Gmail → ⚙️ → Ver todos los ajustes → *Reenvío y correo POP/IMAP* →
+*Añadir una dirección de reenvío* → escribe el Gmail del script → confirma con el código que llega allá.
+Luego, en la búsqueda de Gmail escribe
+`from:(air-e.com OR gascaribe.com OR gasesdelcaribe.com OR aaa.com.co OR claro.com.co)` → ícono de filtros →
+*Crear filtro* → marca *Reenviar a* (el Gmail del script) y *Aplicar también a las conversaciones que coincidan*.
+
+**Si llegan a Outlook/Hotmail:** ⚙️ → Correo → *Reglas* → *Agregar nueva regla* → condición *De* con esas
+direcciones → acción **Redirigir a** (no "Reenviar") el Gmail del script.
+
+**Mejor aún:** inscribe directamente ese Gmail como correo de factura electrónica en cada empresa
+(en su página, oficina virtual o línea de atención). La administración no hace falta: es un valor fijo.
+
+## Valores fijos mensuales
+
+Un servicio puede tener **valor fijo mensual** (✎ en el servicio). Cada mes la app crea sola el recibo
+pendiente con ese valor, y los recordatorios lo incluyen. **Administración** viene con $454.000.

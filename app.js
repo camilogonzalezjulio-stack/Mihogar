@@ -23,8 +23,8 @@ const defaults = () => ({
     { id: uid(), name: 'Gas', icon: '🔥' },
     { id: uid(), name: 'Agua', icon: '💧' },
     { id: uid(), name: 'Internet', icon: '🌐' },
-    { id: uid(), name: 'Administración', icon: '🏢' },
-  ],
+    { id: uid(), name: 'Administración', icon: '🏢', fixed: 454000 },
+  ],              // services: {id, name, icon, fixed?} — fixed: valor que se registra solo cada mes
   bills: [],     // {id, serviceId, month 'YYYY-MM', amount, due, paid, note}
   shopping: [],  // {id, name, qty, price, category, done}
   people: [],    // {id, name}
@@ -56,6 +56,23 @@ const save = () => {
   render();
 };
 
+// Servicios con valor fijo (p. ej. Administración): crea solo el recibo pendiente del mes actual si no existe.
+// Devuelve true si cambió algo.
+function ensureFixedBills() {
+  let changed = false;
+  for (const s of S.services) {
+    // Administración siempre vale 454.000; se pone una vez a quien no tenga valor fijo definido.
+    if (s.fixed === undefined && /^administraci[oó]n$/i.test(s.name.trim())) { s.fixed = 454000; changed = true; }
+  }
+  const month = ym(new Date());
+  for (const s of S.services) {
+    if (!(s.fixed > 0) || S.bills.some(b => b.serviceId === s.id && b.month === month)) continue;
+    S.bills.push({ id: uid(), serviceId: s.id, month, amount: s.fixed, due: '', note: 'Valor fijo mensual', paid: false });
+    changed = true;
+  }
+  return changed;
+}
+
 function listen(col, keys, group, onEmpty) {
   let first = true;
   return onSnapshot(col, snap => {
@@ -66,6 +83,7 @@ function listen(col, keys, group, onEmpty) {
       if (!keys.includes(d.id)) return;
       S[d.id] = d.data().items; synced[d.id] = JSON.stringify(S[d.id]);
     });
+    if (group === 'shared' && ensureFixedBills()) { save(); return; }
     cache(); render();
   }, e => alert('Sin acceso a la base de datos: ' + e.message));
 }
@@ -221,7 +239,7 @@ function vServicios() {
   const cards = S.services.map(s => {
     const bills = S.bills.filter(b => b.serviceId === s.id && b.month === ui.month);
     return `<div class="card">
-      <div class="row between"><h3>${esc(s.icon)} ${esc(s.name)}</h3>
+      <div class="row between"><h3>${esc(s.icon)} ${esc(s.name)}${s.fixed > 0 ? ` <span class="muted">· fijo ${money(s.fixed)}</span>` : ''}</h3>
         <span><button class="icon" data-act="bill-add" data-id="${s.id}" title="Registrar gasto">＋</button>
         <button class="icon" data-act="svc-edit" data-id="${s.id}" title="Editar servicio">✎</button></span></div>
       ${bills.map(b => `<div class="item">
@@ -340,6 +358,8 @@ function vFinanzas() {
     </div>`;
 }
 
+const FIXED_LABEL = 'Valor fijo mensual (déjalo vacío si cambia cada mes)';
+
 const views = { resumen: vResumen, servicios: vServicios, compras: vCompras, finanzas: vFinanzas };
 
 function render() {
@@ -377,14 +397,16 @@ const A = {
     openForm('Nuevo servicio o gasto', [
       { name: 'name', label: 'Nombre (ej. Seguro, Aseo, Streaming)' },
       { name: 'icon', label: 'Emoji', value: '📌', required: false },
-    ], v => { S.services.push({ id: uid(), name: v.name, icon: v.icon || '📌' }); save(); });
+      { name: 'fixed', label: FIXED_LABEL, type: 'number', required: false },
+    ], v => { S.services.push({ id: uid(), name: v.name, icon: v.icon || '📌', fixed: v.fixed || 0 }); ensureFixedBills(); save(); });
   },
   'svc-edit'(id) {
     const s = find(S.services, id);
     openForm('Editar servicio', [
       { name: 'name', label: 'Nombre', value: s.name },
       { name: 'icon', label: 'Emoji', value: s.icon, required: false },
-    ], v => { s.name = v.name; s.icon = v.icon || '📌'; save(); },
+      { name: 'fixed', label: FIXED_LABEL, type: 'number', value: s.fixed || '', required: false },
+    ], v => { s.name = v.name; s.icon = v.icon || '📌'; s.fixed = v.fixed || 0; ensureFixedBills(); save(); },
     () => { S.bills.filter(b => b.serviceId === id && b.receipt).forEach(b => delReceipt(b.id)); S.services = S.services.filter(x => x.id !== id); S.bills = S.bills.filter(b => b.serviceId !== id); save(); });
   },
   'bill-add'(id) { billForm({ serviceId: id, month: ui.month, amount: '', due: '', note: '', paid: false }, true); },
@@ -506,4 +528,6 @@ document.addEventListener('change', e => {
   if (el) A[el.dataset.act](el.dataset.id, el);
 });
 
+// En modo nube esto corre al llegar los datos compartidos (ver listen).
+if (!cloud && ensureFixedBills()) cache();
 render();

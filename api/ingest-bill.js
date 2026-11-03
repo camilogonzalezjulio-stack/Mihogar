@@ -1,8 +1,9 @@
 // Recibe una factura leída de un correo (scripts/gmail-a-mihogar.gs) y la registra en Servicios.
 // POST JSON { provider: 'aire'|'gases'|'triplea'|'claro', amount, month: 'YYYY-MM', due?: 'YYYY-MM-DD', messageId? }
-// Autorización, una de dos:
-//  - `X-Google-Token: <token OAuth>` de una cuenta de Google permitida (así llama el Apps Script, sin claves).
-//  - `Authorization: Bearer <INGEST_SECRET>` (si no existe esa variable, se usa CRON_SECRET).
+// Autorización: `Authorization: Bearer <X>`, donde X es
+//  - INGEST_SECRET (si no existe esa variable, CRON_SECRET), o
+//  - un token OAuth de una cuenta de Google permitida (así llama el Apps Script, sin claves).
+// (Un encabezado propio como X-Google-Token no llega: algo en el camino lo quita.)
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '../lib/admin.mjs';
 import { PROVIDERS, applyBill } from '../lib/bills.mjs';
@@ -15,9 +16,10 @@ const sha = s => createHash('sha256').update(String(s).trim().toLowerCase()).dig
 // Devuelve null si está autorizado, o el motivo del rechazo (sin datos sensibles).
 async function rejection(req) {
   const secret = process.env.INGEST_SECRET || process.env.CRON_SECRET;
-  if (secret && req.headers.authorization === `Bearer ${secret}`) return null;
-  const token = req.headers['x-google-token'];
-  if (!token) return 'falta X-Google-Token';
+  const auth = req.headers.authorization || '';
+  if (secret && auth === `Bearer ${secret}`) return null;
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return 'falta Authorization: Bearer';
   const r = await googleEmail(token);
   if (r.error) return r.error;
   const allowed = process.env.INGEST_GOOGLE_EMAILS

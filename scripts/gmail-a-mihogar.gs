@@ -50,7 +50,7 @@ function revisarCorreo() {
       const res = UrlFetchApp.fetch(CONFIG.endpoint, {
         method: 'post',
         contentType: 'application/json',
-        headers: { 'X-Google-Token': ScriptApp.getOAuthToken() },
+        headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
         muteHttpExceptions: true,
         payload: JSON.stringify({
           provider: empresa.id,

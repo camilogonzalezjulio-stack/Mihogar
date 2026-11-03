@@ -436,10 +436,10 @@ const A = {
   'bill-edit'(id) { billForm(find(S.bills, id), false); },
   'bill-photo'(id) { showReceipt(find(S.bills, id)); },
   'bill-proof'(id) { showReceipt(find(S.bills, id), true); },
-  // Solo se marca como pagado con comprobante: si no lo tiene, se pide antes de cambiar el estado.
+  // Marcar como pagado siempre pide el comprobante; el estado cambia solo al subirlo.
   'bill-paid'(id, el) {
     const b = find(S.bills, id);
-    if (el.checked && !b.proof) { el.checked = false; proofForm(b); return; }
+    if (el.checked) { el.checked = false; proofForm(b); return; }
     if (!el.checked && !confirm('¿Marcar este recibo como pendiente otra vez?')) { el.checked = true; return; }
     b.paid = el.checked; save();
   },
@@ -496,25 +496,21 @@ function billForm(b, isNew) {
     { name: 'due', label: 'Fecha de vencimiento', type: 'date', value: b.due, required: false },
     { name: 'note', label: 'Nota', value: b.note, required: false },
     { name: 'paid', label: 'Ya está pagado (requiere comprobante)', type: 'checkbox', value: b.paid },
-    { name: 'proofFile', label: b.proof ? 'Reemplazar comprobante de pago' : 'Comprobante de pago (foto o PDF)', type: 'file', accept: PROOF_ACCEPT, required: false },
-    { name: 'photo', label: b.receipt ? 'Reemplazar foto del recibo' : 'Foto del recibo', type: 'file', required: false },
-    ...(b.receipt ? [{ name: 'rmPhoto', label: 'Quitar la foto actual', type: 'checkbox', value: false }] : []),
+    { name: 'proofFile', label: b.paid ? 'Reemplazar comprobante de pago' : 'Comprobante de pago (foto o PDF)', type: 'file', accept: PROOF_ACCEPT, required: false },
   ], async v => {
-    const { photo, rmPhoto, proofFile, ...data } = v;
+    const { proofFile, ...data } = v;
     const rec = isNew ? { id: uid(), ...b } : b;
+    let subido = false;
     try {
-      if (proofFile) { await putReceipt(proofKey(rec.id), await toStored(proofFile)); rec.proof = true; }
+      if (proofFile) { await putReceipt(proofKey(rec.id), await toStored(proofFile)); rec.proof = true; subido = true; }
     } catch (e) { alert('No se pudo guardar el comprobante: ' + e.message); }
-    if (data.paid && !rec.proof) {
-      alert('Para marcarlo como pagado tienes que subir el comprobante de pago. Quedó como pendiente.');
+    // Pasar de pendiente a pagado exige subir el comprobante en ese mismo momento.
+    if (data.paid && !rec.paid && !subido) {
+      alert('Para marcarlo como pagado tienes que adjuntar el comprobante de pago. Quedó como pendiente.');
       data.paid = false;
     }
     if (data.paid && !rec.paid) data.paidAt = today();
     Object.assign(rec, data);
-    try {
-      if (photo) { await putReceipt(rec.id, await compress(photo)); rec.receipt = true; }
-      else if (rmPhoto) { await delReceipt(rec.id); rec.receipt = false; }
-    } catch (e) { alert('No se pudo guardar la foto: ' + e.message); }
     if (isNew) S.bills.push(rec);
     save();
   },

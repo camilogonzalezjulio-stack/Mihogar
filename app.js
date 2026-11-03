@@ -581,6 +581,34 @@ function txForm(t, isNew) {
   isNew ? null : () => { S.tx = S.tx.filter(x => x.id !== t.id); save(); });
 }
 
+/* ---------- Productos comprados → Compras "Hay en casa" ---------- */
+const normName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const words = s => normName(s).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 3 && !/^\d+$/.test(w));
+// Grupo de Compras según palabras del producto; lo que no se reconozca va a Cocina.
+const CAT_WORDS = [
+  ['Nevera', /leche|huevo|queso|quesillo|yogur|kumis|mantequill|marg|jamon|salchich|carne|pollo|pescado|cerdo|res\b|fruta|manzana|pera|fresa|mora|limon|naranja|banano|mango|uva|tomate|cebolla|zanahoria|lechuga|verdura|kiwi|aguacate|papa\b|jugo|gaseosa|agua|cerveza|helado/],
+  ['Limpieza', /detergente|jabon (en )?polvo|lavaloza|lavalo|cloro|blanqu|varsol|suaviz|limpia|desinfect|esponja|bolsa|basura|ambientador|escoba|trapero|guante|lavaplatos/],
+  ['Baños', /papel hig|pa hig|higien|shampoo|champu|crema dental|dental|cepillo|jabon|toalla|desodorante|afeitar|pantaj|panal|protector/],
+];
+function guessShopCat(name) {
+  const n = normName(name);
+  return (CAT_WORDS.find(([, re]) => re.test(n)) || ['Cocina'])[0];
+}
+const prettyName = s => String(s).toLowerCase().replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
+
+// Marca como "Hay" los que ya estaban en Compras (aunque el nombre sea más corto, p. ej. "Arroz") y crea los demás.
+function addToStock(items) {
+  let marked = 0, added = 0;
+  for (const it of items.filter(i => i.name.trim())) {
+    const w = words(it.name);
+    const match = S.shopping.find(s => { const sw = words(s.name); return sw.length && sw.every(x => w.some(y => y.startsWith(x) || x.startsWith(y))); });
+    if (match) { if (!match.done) { match.done = true; marked++; } continue; }
+    S.shopping.push({ id: uid(), name: prettyName(it.name), qty: 1, price: Number(it.price) || 0, category: guessShopCat(it.name), done: true });
+    added++;
+  }
+  return { marked, added };
+}
+
 /* ---------- Escanear factura (OCR) ---------- */
 async function scanReceipt(file) {
   const f = $('#dlg-form'), dlg = $('#dlg');
@@ -609,6 +637,7 @@ function reviewReceipt(t, isNew = false) {
   const f = $('#dlg-form'), dlg = $('#dlg');
   let items = (t.items || []).map(i => ({ ...i }));
   let totalManual = !isNew; // en uno ya guardado se respeta el total; en uno nuevo se suma solo
+  let toStock = true;
   const row = (i, n) => `<div class="row" style="gap:6px;margin-top:6px">
       <input data-i="${n}" data-k="name" value="${esc(i.name)}" placeholder="Producto" style="flex:1;margin:0">
       <input data-i="${n}" data-k="price" type="number" min="0" value="${i.price}" style="width:110px;margin:0">
@@ -625,6 +654,8 @@ function reviewReceipt(t, isNew = false) {
       <button type="button" class="ghost sm" id="add-row" style="margin-top:8px">+ Agregar producto</button>
       <label>Total<input name="amount" type="number" min="0" required value="${t.amount || ''}"></label>
       <div class="muted" id="sum"></div>
+      ${isNew ? `<label class="row" style="margin-top:12px"><input type="checkbox" name="toStock" ${toStock ? 'checked' : ''}>
+        Pasar los productos a "Hay en casa" en Compras</label>` : ''}
       <div class="actions"><button type="button" class="ghost" id="r-cancel">Cancelar</button><button class="btn">Guardar egreso</button></div>`;
     showSum();
   };
@@ -637,6 +668,7 @@ function reviewReceipt(t, isNew = false) {
       if (!totalManual) f.elements.amount.value = sum();
       showSum();
     } else if (el.name === 'amount') totalManual = true;
+    else if (el.name === 'toStock') toStock = el.checked;
     else if (el.name) t[el.name] = el.value;
   };
   f.onclick = e => {
@@ -652,9 +684,11 @@ function reviewReceipt(t, isNew = false) {
     const rec = isNew ? { id: uid(), type: 'out', ...t } : t;
     Object.assign(rec, { amount: Number(t.amount) || sum(), items: items.filter(i => i.name.trim() || i.price) });
     if (isNew) S.tx.push(rec);
+    const stock = isNew && toStock ? addToStock(rec.items) : null;
     ui.personId = rec.personId;
     dlg.close();
     save();
+    if (stock && (stock.marked || stock.added)) alert(`En Compras: ${stock.marked} ya estaban en la lista y pasaron a "Hay en casa"; ${stock.added} se agregaron como "Hay en casa".`);
   };
   draw();
   if (!dlg.open) dlg.showModal();

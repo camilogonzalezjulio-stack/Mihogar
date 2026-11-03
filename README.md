@@ -142,7 +142,7 @@ En **Compras e inventario → 📷 Escanear factura** se toma o elige la foto de
 dentro del navegador (la foto no se envía a ningún servicio; la primera vez descarga el lector en español, ~2 MB),
 detecta tienda, fecha, productos con precio y total, y abre una pantalla **editable** para corregir, agregar o quitar
 productos antes de guardar. Se guarda como **un egreso** de quien la escanea (su persona en Finanzas) con el detalle de productos (🧾 para verlo
-o editarlo), y los productos pasan a Compras → "Hay en casa" (los que estaban en Falta se marcan como Hay; los nuevos se crean en Cocina, Nevera, Limpieza o Baños según su nombre). La lectura no es perfecta en tiquetes borrosos o arrugados: por eso siempre se revisa antes de guardar.
+o editarlo), y los productos comprados se quitan de "Falta" en Compras. La lectura no es perfecta en tiquetes borrosos o arrugados: por eso siempre se revisa antes de guardar.
 
 ## Aviso de pago
 
@@ -155,7 +155,7 @@ Firebase. La función verifica el usuario, lee el recibo en Firestore y avisa po
 Las secciones de Compras (Comida, Baños, Cuarto principal, Oficina, Lavandería, Limpieza, Muebles y/o accesorios)
 se guardan en Firestore (`homes/main/data/shopcats`) y se pueden renombrar, cambiar de ícono (✎ Sección), crear
 ("Nueva sección") o eliminar (sus productos pasan a "Otros"). Agregar a mano siempre crea el producto como **Falta**;
-lo que hay en casa llega al escanear una factura.
+con ✓ se quita un producto, y al escanear una factura se quitan los que se compraron.
 
 **🧾 Lista de compras** (en Compras o tocando "Compras pendientes" en el Resumen): se marcan las secciones a incluir
 y se genera una lista estilo recibo para ir marcando en la tienda (las marcas se guardan en el dispositivo). **✅ Terminar compra** quita de Compras lo marcado, muestra el recibo "COMPRA REALIZADA" con lo que quedó pendiente y avisa por Telegram y Discord.

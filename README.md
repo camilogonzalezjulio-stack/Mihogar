@@ -158,6 +158,6 @@ se guardan en Firestore (`homes/main/data/shopcats`) y se pueden renombrar, camb
 lo que hay en casa llega al escanear una factura.
 
 **🧾 Lista de compras** (en Compras o tocando "Compras pendientes" en el Resumen): se marcan las secciones a incluir
-y se genera una lista estilo recibo con cantidades y total estimado, que se puede copiar o compartir.
+y se genera una lista estilo recibo para ir marcando en la tienda (las marcas se guardan en el dispositivo). **✅ Terminar compra** quita de Compras lo marcado, muestra el recibo "COMPRA REALIZADA" con lo que quedó pendiente y avisa por Telegram y Discord.
 
 Cuando alguien agrega que falta algo (o pasa un producto a Falta), `api/notice.js` avisa por Telegram y Discord.

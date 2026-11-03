@@ -1,6 +1,7 @@
 // Avisos por Telegram y Discord que dispara la app. POST con `Authorization: Bearer <ID token de Firebase>`:
 //   { type: 'paid', billId }    → "✅ Camilo ya pagó el servicio de 🌐 Internet (octubre de 2026): $ 44.950"
 //   { type: 'missing', itemId } → "🛒 Sofia agregó que falta: Arroz ×2 (🍽️ Comida)"
+//   { type: 'purchase', items: [{ name, qty }] } → "🛍️ Camilo hizo la compra (3 productos): …"
 // El mensaje se arma con los datos de Firestore (no con lo que mande el navegador).
 import { auth, db } from '../lib/admin.mjs';
 import { send } from '../lib/notify.mjs';
@@ -43,6 +44,19 @@ async function missingMessage(who, itemId) {
     `En total faltan ${pending} ${pending === 1 ? 'producto' : 'productos'} en la casa.`].join('\n')];
 }
 
+// Los productos comprados ya se borraron de Compras, así que la lista viene de la app (solo nombres y cantidades).
+async function purchaseMessage(who, items) {
+  const list = (Array.isArray(items) ? items : []).slice(0, 80)
+    .map(i => ({ name: String(i?.name || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 60), qty: Math.max(1, Math.min(999, Number(i?.qty) || 1)) }))
+    .filter(i => i.name);
+  if (!list.length) return [400, 'Compra sin productos'];
+  const d = await readUntil(['shopping'], () => true);
+  const left = d.shopping.filter(i => !i.done).length;
+  return [200, [`🛍️ ${who} hizo la compra (${list.length} ${list.length === 1 ? 'producto' : 'productos'}):`,
+    ...list.map(i => `• ${i.name}${i.qty > 1 ? ` ×${i.qty}` : ''}`),
+    left ? `Todavía faltan ${left} ${left === 1 ? 'producto' : 'productos'} en la casa.` : 'Ya no falta nada en la casa. 🎉'].join('\n')];
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' });
   const token = (req.headers.authorization || '').replace(/^Bearer /, '');
@@ -59,7 +73,8 @@ export default async function handler(req, res) {
     const who = user.email.split('@')[0].replace(/^./, c => c.toUpperCase());
     const [code, text] = body.type === 'paid' && body.billId ? await paidMessage(who, body.billId)
       : body.type === 'missing' && body.itemId ? await missingMessage(who, body.itemId)
-        : [400, 'Tipo de aviso inválido'];
+        : body.type === 'purchase' ? await purchaseMessage(who, body.items)
+          : [400, 'Tipo de aviso inválido'];
     if (code !== 200) return res.status(code).json({ error: text });
     const r = await send(text);
     res.status(200).json({ avisado: r.sent.length > 0, enviado: r.sent, errores: r.errors });

@@ -174,6 +174,21 @@ button.badge:hover { filter: brightness(.95); }
 .r-cat { margin: 10px 0 2px; font-weight: 700; }
 .r-sum span:nth-child(2) { font-weight: 700; }
 .r-empty { text-align: center; padding: 14px 0; }
+/* Checklist: la casilla va a la izquierda de la cantidad y lo marcado se tacha. */
+.checklist .r-row { grid-template-columns: 22px 30px 1fr auto; }
+.checklist .r-head { grid-template-columns: 22px 30px 1fr auto; }
+
+.r-check { margin: 0; color: inherit; font: inherit; cursor: pointer; align-items: center; border-radius: 3px; }
+.r-check input {
+  appearance: none; -webkit-appearance: none; width: 15px; height: 15px; margin: 0; padding: 0; border: 1.5px solid #222;
+  border-radius: 2px; background: transparent; display: grid; place-items: center; cursor: pointer;
+}
+.r-check input:checked { background: #161616; }
+.r-check input:checked::after { content: '✓'; color: #f3f3f1; font-size: 11px; line-height: 1; }
+.r-check.on span { text-decoration: line-through; opacity: .45; }
+.r-check:hover { background: rgba(0, 0, 0, .04); }
+.buy-done { color: var(--ok); font-weight: 800; border: 1.5px solid var(--line); }
+.buy-done:hover { background: rgba(16, 163, 108, .12); color: var(--ok); }
 .r-thanks { text-align: center; margin: 14px 0 10px; }
 .r-barcode { display: block; width: 100%; height: 44px; fill: #111; }
 .r-foot { text-align: center; margin-top: 4px; font-size: 12px; }

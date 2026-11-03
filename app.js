@@ -304,55 +304,48 @@ function ensureShopCats() {
     const to = OLD_CATS[normName(i.category)];
     if (to && catById(to)) { i.category = to; changed = true; }
   }
+  // Compras ya no lleva inventario de "hay en casa": solo lo que falta. Se quitan los que quedaron como "hay".
+  if (S.shopping.some(i => i.done)) { S.shopping = S.shopping.filter(i => !i.done); changed = true; }
   return changed;
 }
 
-// En compras, `done` significa "hay en la casa"; sin marcar significa "falta".
+// Compras es la lista de lo que falta; al comprarlo se quita (✓ o "Terminar compra" en la lista).
 function vCompras() {
-  const pend = S.shopping.filter(i => !i.done);
+  const pend = S.shopping;
   const line = i => `<div class="item">
-    <button class="badge ${i.done ? 'paid' : 'pend'}" style="border:0;min-width:58px" data-act="buy-toggle" data-id="${i.id}"
-      title="Cambiar a ${i.done ? 'Falta' : 'Hay'}">${i.done ? '✔ Hay' : '✖ Falta'}</button>
-    <span class="grow"><span class="name">${esc(i.name)}</span>${i.done ? '' : ` <span class="muted">×${i.qty || 1}</span>`}</span>
-    <b>${!i.done && i.price ? money(i.price * (i.qty || 1)) : ''}</b>
+    <button class="icon buy-done" data-act="buy-done" data-id="${i.id}" title="Ya lo compré: quitar de la lista">✓</button>
+    <span class="grow"><span class="name">${esc(i.name)}</span> <span class="muted">×${i.qty || 1}</span></span>
+    <b>${i.price ? money(i.price * (i.qty || 1)) : ''}</b>
     <button class="icon" data-act="buy-edit" data-id="${i.id}">✎</button></div>`;
   const cats = shopCatsWithOtros();
-  const split = id => {
-    const items = S.shopping.filter(i => catOf(i) === id);
-    return [items.filter(i => !i.done), items.filter(i => i.done)];
-  };
+  const itemsOf = id => S.shopping.filter(i => catOf(i) === id);
 
   // Pantalla de una sección
   const open = cats.find(c => c.id === ui.shopCat);
   if (open) {
-    const [p, d] = split(open.id), otros = open.id === OTROS.id;
+    const p = itemsOf(open.id), otros = open.id === OTROS.id;
     return `<button class="ghost sm" data-act="shop-back" style="margin-bottom:14px">← Compras</button>
       <div class="head">
         <span class="row"><span class="cat-icon">${esc(open.icon)}</span><span><h2 style="margin:0">${esc(open.name)}</h2>
-          <span class="muted">${p.length} faltan · ${d.length} hay${p.length ? ' · Estimado ' + money(estimate(p)) : ''}</span></span></span>
+          <span class="muted">${p.length} faltan${p.length ? ' · Estimado ' + money(estimate(p)) : ''}</span></span></span>
         ${otros ? '' : `<span class="row"><button class="ghost" data-act="cat-edit" data-id="${open.id}" title="Cambiar nombre o ícono">✎ Sección</button>
           <button class="btn" data-act="buy-add" data-id="${open.id}">+ Falta algo</button></span>`}</div>
-      <div class="grid two-eq">
-        <div class="card"><div class="section-label warn" style="margin-top:0">✖ Falta (${p.length})</div>
-          ${p.map(line).join('') || '<div class="empty">No falta nada 🎉</div>'}</div>
-        <div class="card"><div class="section-label ok" style="margin-top:0">✔ Hay en casa (${d.length})</div>
-          ${d.map(line).join('') || '<div class="empty">Nada registrado</div>'}</div>
-      </div>`;
+      <div class="card"><div class="section-label warn" style="margin-top:0">✖ Falta (${p.length})</div>
+        ${p.map(line).join('') || '<div class="empty">No falta nada 🎉</div>'}</div>`;
   }
 
   // Vista general: una tarjeta por sección
   const tiles = cats.map(c => {
-    const [p, d] = split(c.id), total = p.length + d.length;
+    const p = itemsOf(c.id);
     return `<button class="card tile" data-act="shop-open" data-id="${c.id}">
       <span class="cat-icon">${esc(c.icon)}</span>
       <h3>${esc(c.name)}</h3>
-      <span class="muted">${total ? `<span class="${p.length ? 'warn' : 'ok'}"><b>${p.length}</b> faltan</span> · <b>${d.length}</b> hay` : 'Sin productos'}</span>
-      <span class="progress"><i style="width:${total ? d.length / total * 100 : 0}%"></i></span>
+      <span class="muted">${p.length ? `<span class="warn"><b>${p.length}</b> ${p.length === 1 ? 'falta' : 'faltan'}</span>` : '<span class="ok">No falta nada</span>'}</span>
       <span class="muted">${p.length ? 'Estimado ' + money(estimate(p)) : '&nbsp;'}</span>
     </button>`;
   }).join('');
   return `<div class="head">
-    <span><h2 style="margin:0">Compras e inventario</h2><span class="muted">${pend.length} faltan · ${S.shopping.length - pend.length} hay · Estimado ${money(estimate(pend))}</span></span>
+    <span><h2 style="margin:0">Compras</h2><span class="muted">${pend.length} faltan · Estimado ${money(estimate(pend))}</span></span>
     <span class="row"><button class="btn" data-act="shop-list" title="Generar la lista de lo que falta">🧾 Lista de compras</button>
     <button class="btn" data-act="tx-scan" title="Leer una factura con la cámara">📷 Escanear factura</button>
     <button class="btn" data-act="buy-add">+ Falta algo</button></span></div>
@@ -476,10 +469,7 @@ const A = {
 
   'buy-add'(cat) { buyForm({ name: '', qty: 1, price: '', category: cat || S.shopcats[0]?.id }, true); },
   'buy-edit'(id) { buyForm(find(S.shopping, id), false); },
-  'buy-toggle'(id) {
-    const i = find(S.shopping, id); i.done = !i.done; save();
-    if (!i.done) notify({ type: 'missing', itemId: i.id });
-  },
+  'buy-done'(id) { S.shopping = S.shopping.filter(i => i.id !== id); save(); },
   'cat-add'() { catForm(null); },
   'cat-edit'(id) { catForm(catById(id)); },
   'shop-list'() { shopListPicker(); },
@@ -591,7 +581,7 @@ const notifyPaid = billId => notify({ type: 'paid', billId });
 function shopListPicker(selected) {
   const f = $('#dlg-form'), dlg = $('#dlg');
   f.oninput = f.onclick = null;
-  const cats = shopCatsWithOtros().map(c => ({ ...c, n: S.shopping.filter(i => !i.done && catOf(i) === c.id).length }));
+  const cats = shopCatsWithOtros().map(c => ({ ...c, n: S.shopping.filter(i => catOf(i) === c.id).length }));
   const sel = new Set(selected || cats.filter(c => c.n).map(c => c.id));
   f.innerHTML = `<h2>🧾 Lista de compras</h2><div class="muted">Marca las secciones que quieres en la lista.</div>
     <div class="row" style="margin-top:10px"><button type="button" class="ghost sm" id="sl-all">Todas</button>
@@ -616,54 +606,110 @@ function shopListPicker(selected) {
   if (!dlg.open) dlg.showModal();
 }
 
-function shopListReceipt(ids) {
-  const f = $('#dlg-form');
-  f.oninput = f.onclick = null;
-  const cats = shopCatsWithOtros().filter(c => ids.includes(c.id));
-  const groups = cats.map(c => ({ c, items: S.shopping.filter(i => !i.done && catOf(i) === c.id) })).filter(g => g.items.length);
-  const all = groups.flatMap(g => g.items);
-  const total = estimate(all), qty = all.reduce((t, i) => t + (Number(i.qty) || 1), 0);
+// Marcas del checklist mientras se compra: solo en este dispositivo y sobreviven si se cierra la app.
+const CHECKS_KEY = 'mihogar:compra';
+const loadChecks = () => { try { return new Set(JSON.parse(localStorage.getItem(CHECKS_KEY)) || []); } catch { return new Set(); } };
+const saveChecks = set => { try { localStorage.setItem(CHECKS_KEY, JSON.stringify([...set])); } catch { /* sin almacenamiento */ } };
+
+// Recibo estilo Receiptify. groups: [{ c, items }]; checks: Set de ids marcados (o null si no es checklist).
+function receiptHtml({ sub, groups, sumLabel, summary, checks }) {
   const now = new Date();
   const who = (cloud ? userName() : find(S.people, ui.personId)?.name || '') || 'LA CASA';
   const date = now.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const order = String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  const all = groups.flatMap(g => g.items);
+  const qty = all.reduce((t, i) => t + (Number(i.qty) || 1), 0);
   const amt = i => i.price ? money(i.price * (i.qty || 1)).replace(/\s/g, '') : '—';
   // Código de barras decorativo, siempre igual para el mismo día.
   let seed = Number(order), bars = '';
   for (let x = 0; x < 236;) { seed = (seed * 9301 + 49297) % 233280; const w = 1 + (seed % 3); bars += `<rect x="${x}" width="${w}" height="44"/>`; x += w + 1 + (seed % 2); }
-
-  const text = ['MIHOGAR · LISTA DE COMPRAS', date.toUpperCase(), '',
-    ...groups.flatMap(g => [`— ${g.c.name.toUpperCase()} —`, ...g.items.map(i => `${String(i.qty || 1).padStart(2, '0')}  ${i.name}${i.price ? '  ' + amt(i) : ''}`), '']),
-    `PRODUCTOS: ${qty}`, `TOTAL ESTIMADO: ${money(total)}`].join('\n');
-
-  f.innerHTML = `<div class="receipt">
-      <div class="r-title">MIHOGAR</div><div class="r-sub">LISTA DE COMPRAS</div>
+  const row = i => {
+    const cells = `<span>${String(i.qty || 1).padStart(2, '0')}</span><span>${esc(i.name.toUpperCase())}</span><span>${amt(i)}</span>`;
+    if (!checks) return `<div class="r-row">${cells}</div>`;
+    const on = checks.has(i.id);
+    return `<label class="r-row r-check${on ? ' on' : ''}"><input type="checkbox" data-check="${i.id}" ${on ? 'checked' : ''}>${cells}</label>`;
+  };
+  return `<div class="receipt${checks ? ' checklist' : ''}">
+      <div class="r-title">MIHOGAR</div><div class="r-sub">${sub}</div>
       <div class="r-meta">PEDIDO #${order} PARA ${esc(who.toUpperCase())}<br>${esc(date.toUpperCase())}</div>
       <div class="r-line"></div>
-      <div class="r-row r-head"><span>CANT</span><span>PRODUCTO</span><span>APROX</span></div>
+      <div class="r-row r-head">${checks ? "<span></span>" : ""}<span>CANT</span><span>PRODUCTO</span><span>APROX</span></div>
       <div class="r-line"></div>
-      ${groups.map(g => `<div class="r-cat">${esc(g.c.icon)} ${esc(g.c.name.toUpperCase())}</div>
-        ${g.items.map(i => `<div class="r-row"><span>${String(i.qty || 1).padStart(2, '0')}</span><span>${esc(i.name.toUpperCase())}</span><span>${amt(i)}</span></div>`).join('')}`).join('')
+      ${groups.map(g => `<div class="r-cat">${esc(g.c.icon)} ${esc(g.c.name.toUpperCase())}</div>${g.items.map(row).join('')}`).join('')
         || '<div class="r-empty">NO FALTA NADA EN ESTAS SECCIONES 🎉</div>'}
       <div class="r-line"></div>
-      <div class="r-row r-sum"><span></span><span>PRODUCTOS:</span><span>${qty}</span></div>
-      <div class="r-row r-sum"><span></span><span>TOTAL ESTIMADO:</span><span>${money(total).replace(/\s/g, '')}</span></div>
+      <div class="r-row r-sum">${checks ? "<span></span>" : ""}<span></span><span>PRODUCTOS:</span><span>${qty}</span></div>
+      <div class="r-row r-sum">${checks ? "<span></span>" : ""}<span></span><span>${sumLabel}:</span><span>${money(estimate(all)).replace(/\s/g, '')}</span></div>
       <div class="r-line"></div>
-      <div class="r-meta">SECCIONES: ${esc(cats.map(c => c.name.toUpperCase()).join(', '))}</div>
-      <div class="r-thanks">¡GRACIAS POR HACER EL MERCADO!</div>
+      ${summary}
       <svg class="r-barcode" viewBox="0 0 236 44" preserveAspectRatio="none">${bars}</svg>
       <div class="r-foot">mihogar-orcin.vercel.app</div>
-    </div>
+    </div>`;
+}
+
+const listGroups = ids => shopCatsWithOtros().filter(c => ids.includes(c.id))
+  .map(c => ({ c, items: S.shopping.filter(i => catOf(i) === c.id) })).filter(g => g.items.length);
+
+// Lista para ir marcando en la tienda; "Terminar compra" quita lo marcado de Compras.
+function shopListReceipt(ids) {
+  const f = $('#dlg-form');
+  f.oninput = f.onclick = null;
+  const checks = loadChecks();
+  const groups = listGroups(ids);
+  const all = groups.flatMap(g => g.items);
+  const names = shopCatsWithOtros().filter(c => ids.includes(c.id)).map(c => c.name.toUpperCase()).join(', ');
+  const text = ['MIHOGAR · LISTA DE COMPRAS', new Date().toLocaleDateString('es-CO', { dateStyle: 'full' }).toUpperCase(), '',
+    ...groups.flatMap(g => [`— ${g.c.name.toUpperCase()} —`, ...g.items.map(i => `☐ ${String(i.qty || 1).padStart(2, '0')}  ${i.name}`), '']),
+    `PRODUCTOS: ${all.reduce((t, i) => t + (Number(i.qty) || 1), 0)}`, `TOTAL ESTIMADO: ${money(estimate(all))}`].join('\n');
+  const progress = () => `${all.filter(i => checks.has(i.id)).length} de ${all.length} en el carrito`;
+
+  f.innerHTML = receiptHtml({ sub: 'LISTA DE COMPRAS', groups, sumLabel: 'TOTAL ESTIMADO', checks,
+      summary: `<div class="r-meta">SECCIONES: ${esc(names)}</div>
+        <div class="r-thanks">${all.length ? 'MARCA LO QUE VAS ECHANDO AL CARRITO' : '¡GRACIAS POR HACER EL MERCADO!'}</div>` })
+    + `<div class="muted" style="text-align:center;margin-top:10px" id="sl-count">${all.length ? progress() : ''}</div>
     <div class="actions" style="flex-wrap:wrap">
       <button type="button" class="ghost" id="sl-back">← Secciones</button>
       <button type="button" class="ghost" id="sl-copy">📋 Copiar</button>
       ${navigator.share ? '<button type="button" class="ghost" id="sl-share">📤 Compartir</button>' : ''}
-      <button class="btn">Cerrar</button></div>`;
+      ${all.length ? '<button class="btn">✅ Terminar compra</button>' : '<button type="button" class="btn" id="sl-close">Cerrar</button>'}</div>`;
+  f.oninput = e => {
+    const id = e.target.dataset?.check;
+    if (!id) return;
+    e.target.checked ? checks.add(id) : checks.delete(id);
+    e.target.closest('.r-check').classList.toggle('on', e.target.checked);
+    saveChecks(checks);
+    $('#sl-count').textContent = progress();
+  };
   f.onclick = async e => {
     if (e.target.id === 'sl-back') shopListPicker(ids);
+    if (e.target.id === 'sl-close') $('#dlg').close();
     if (e.target.id === 'sl-copy') { try { await navigator.clipboard.writeText(text); e.target.textContent = '✓ Copiada'; } catch { alert(text); } }
     if (e.target.id === 'sl-share') navigator.share({ title: 'Lista de compras', text }).catch(() => {});
   };
+  f.onsubmit = e => { e.preventDefault(); finishPurchase(ids, groups, checks); };
+}
+
+// Quita de Compras lo marcado, avisa por Telegram/Discord y muestra el recibo de la compra realizada.
+function finishPurchase(ids, groups, checks) {
+  const bought = groups.map(g => ({ c: g.c, items: g.items.filter(i => checks.has(i.id)) })).filter(g => g.items.length);
+  const left = groups.flatMap(g => g.items.filter(i => !checks.has(i.id)));
+  const items = bought.flatMap(g => g.items);
+  if (!items.length) return alert('Marca primero lo que compraste.');
+  if (!confirm(`¿Terminar la compra? Se quitarán ${items.length} ${items.length === 1 ? 'producto' : 'productos'} de "Falta".`)) return;
+  const quitar = new Set(items.map(i => i.id));
+  S.shopping = S.shopping.filter(i => !quitar.has(i.id));
+  quitar.forEach(id => checks.delete(id));
+  saveChecks(checks);
+  save();
+  notify({ type: 'purchase', items: items.map(i => ({ name: i.name, qty: Number(i.qty) || 1 })) });
+
+  const f = $('#dlg-form');
+  f.oninput = f.onclick = null;
+  f.innerHTML = receiptHtml({ sub: 'COMPRA REALIZADA ✓', groups: bought, sumLabel: 'TOTAL APROX', checks: null,
+      summary: `<div class="r-meta">${left.length ? `QUEDARON PENDIENTES (${left.length}):<br>${left.map(i => '· ' + esc(i.name.toUpperCase())).join('<br>')}` : 'NO QUEDÓ NADA PENDIENTE 🎉'}</div>
+        <div class="r-thanks">¡GRACIAS POR HACER EL MERCADO!</div>` })
+    + `<div class="actions"><button type="button" class="ghost" id="sl-again">🧾 Nueva lista</button><button class="btn">Cerrar</button></div>`;
+  f.onclick = e => { if (e.target.id === 'sl-again') shopListPicker(ids); };
   f.onsubmit = e => { e.preventDefault(); $('#dlg').close(); };
 }
 
@@ -743,23 +789,20 @@ function openViewer(src, filename) {
   img.addEventListener('pointercancel', end);
 })();
 
-// Agregar a mano siempre es "falta"; lo que hay en casa llega al escanear una factura.
+// Todo lo que está en Compras falta; al comprarlo se quita de la lista.
 function buyForm(i, isNew) {
   const catOptions = S.shopcats.map(c => ({ v: c.id, t: `${c.icon} ${c.name}` }));
   openForm(isNew ? '¿Qué falta?' : 'Editar producto', [
     { name: 'name', label: 'Producto', value: i.name },
-    ...(isNew ? [] : [{ name: 'status', label: 'Estado', type: 'select', value: i.done ? 'hay' : 'falta',
-      options: [{ v: 'falta', t: '✖ Falta (hay que comprar)' }, { v: 'hay', t: '✔ Hay en casa' }] }]),
     { name: 'qty', label: 'Cantidad a comprar', type: 'number', value: i.qty },
     { name: 'price', label: 'Precio unitario estimado', type: 'number', value: i.price, required: false },
     { name: 'category', label: 'Sección', type: 'select', value: catById(i.category) ? i.category : S.shopcats[0]?.id, options: catOptions },
-  ], ({ status, ...v }) => {
-    const nowMissing = isNew || (status === 'falta' && i.done);
-    Object.assign(i, v, { done: isNew ? false : status === 'hay' });
+  ], v => {
+    Object.assign(i, v, { done: false });
     const rec = isNew ? { id: uid(), ...i } : i;
     if (isNew) S.shopping.push(rec);
     save();
-    if (nowMissing) notify({ type: 'missing', itemId: rec.id });
+    if (isNew) notify({ type: 'missing', itemId: rec.id });
   },
   isNew ? null : () => { S.shopping = S.shopping.filter(x => x.id !== i.id); save(); });
 }
@@ -792,36 +835,19 @@ function txForm(t, isNew) {
   isNew ? null : () => { S.tx = S.tx.filter(x => x.id !== t.id); save(); });
 }
 
-/* ---------- Productos comprados → Compras "Hay en casa" ---------- */
+/* ---------- Productos comprados → se quitan de Compras ---------- */
 const normName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const words = s => normName(s).split(/[^a-z0-9ñ]+/).filter(w => w.length >= 3 && !/^\d+$/.test(w));
-// Sección de Compras según palabras del producto (si existe); lo demás va a Comida o a la primera sección.
-const CAT_WORDS = [
-  ['lavanderia', /detergente|jabon (en )?polvo|suaviz|blanqu|quitamanch|ropa|fab\b|ariel|lavanderia/],
-  ['limpieza', /lavaloza|lavalo|lavaplatos|cloro|varsol|limpia|desinfect|esponja|bolsa|basura|ambientador|escoba|trapero|guante|recogedor/],
-  ['banos', /papel hig|pa hig|higien|shampoo|champu|crema dental|dental|cepillo|jabon|toalla|desodorante|afeitar|pantaj|panal|protector/],
-  ['oficina', /cuaderno|lapiz|lapicero|boligrafo|esfero|resma|carpeta|grapa|marcador|tinta|cartucho/],
-  ['cuarto', /sabana|almohada|cobija|edredon|colchon|cortina/],
-  ['muebles', /silla|mesa|lampara|bombillo|foco|estante|repisa|cojin|alfombra|organizador/],
-];
-function guessShopCat(name) {
-  const n = normName(name);
-  const id = (CAT_WORDS.find(([, re]) => re.test(n)) || ['comida'])[0];
-  return catById(id) ? id : (catById('comida') ? 'comida' : S.shopcats[0]?.id || OTROS.id);
-}
-const prettyName = s => String(s).toLowerCase().replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
 
-// Marca como "Hay" los que ya estaban en Compras (aunque el nombre sea más corto, p. ej. "Arroz") y crea los demás.
-function addToStock(items) {
-  let marked = 0, added = 0;
+// Quita de Compras lo que se compró (aunque en la lista tenga un nombre más corto, p. ej. "Arroz").
+function removeBought(items) {
+  let removed = 0;
   for (const it of items.filter(i => i.name.trim())) {
     const w = words(it.name);
-    const match = S.shopping.find(s => { const sw = words(s.name); return sw.length && sw.every(x => w.some(y => y.startsWith(x) || x.startsWith(y))); });
-    if (match) { if (!match.done) { match.done = true; marked++; } continue; }
-    S.shopping.push({ id: uid(), name: prettyName(it.name), qty: 1, price: Number(it.price) || 0, category: guessShopCat(it.name), done: true });
-    added++;
+    const k = S.shopping.findIndex(s => { const sw = words(s.name); return sw.length && sw.every(x => w.some(y => y.startsWith(x) || x.startsWith(y))); });
+    if (k >= 0) { S.shopping.splice(k, 1); removed++; }
   }
-  return { marked, added };
+  return removed;
 }
 
 // Persona de quien escanea: en la nube, la que tiene su nombre de usuario (o la primera de sus finanzas,
@@ -881,7 +907,7 @@ function reviewReceipt(t, isNew = false) {
       <label>Total<input name="amount" type="number" min="0" required value="${t.amount || ''}"></label>
       <div class="muted" id="sum"></div>
       ${isNew ? `<label class="row" style="margin-top:12px"><input type="checkbox" name="toStock" ${toStock ? 'checked' : ''}>
-        Pasar los productos a "Hay en casa" en Compras</label>` : ''}
+        Quitar de "Falta" en Compras lo que compraste</label>` : ''}
       <div class="actions"><button type="button" class="ghost" id="r-cancel">Cancelar</button><button class="btn">Guardar egreso</button></div>`;
     showSum();
   };
@@ -910,11 +936,11 @@ function reviewReceipt(t, isNew = false) {
     const rec = isNew ? { id: uid(), type: 'out', ...t } : t;
     Object.assign(rec, { amount: Number(t.amount) || sum(), items: items.filter(i => i.name.trim() || i.price) });
     if (isNew) S.tx.push(rec);
-    const stock = isNew && toStock ? addToStock(rec.items) : null;
+    const quitados = isNew && toStock ? removeBought(rec.items) : 0;
     ui.personId = rec.personId;
     dlg.close();
     save();
-    if (stock && (stock.marked || stock.added)) alert(`En Compras: ${stock.marked} ya estaban en la lista y pasaron a "Hay en casa"; ${stock.added} se agregaron como "Hay en casa".`);
+    if (quitados) alert(`Se quitaron de "Falta" ${quitados} ${quitados === 1 ? 'producto que ya compraste' : 'productos que ya compraste'}.`);
   };
   draw();
   if (!dlg.open) dlg.showModal();

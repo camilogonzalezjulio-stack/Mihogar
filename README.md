@@ -42,9 +42,9 @@ La app está en **https://mihogar-orcin.vercel.app** (equipo `mojon` de Vercel),
 npm run deploy
 ```
 
-(equivale a `git push`). Vercel no recibe el `.env` (ver `.vercelignore`): las variables `VITE_*` se cargan
-una vez en Vercel → mihogar → Settings → Environment Variables (se puede pegar el `.env` completo) y luego
-se vuelve a publicar.
+(equivale a `git push`). Vercel no necesita variables de entorno: la configuración web de Firebase va como
+valor por defecto en `firebase-config.js` (no es secreta). Un `.env` con `VITE_FIREBASE_*` la reemplaza si
+algún día quieres apuntar a otro proyecto.
 
 Para publicar reglas desde la terminal (opcional): `npm install -g firebase-tools`, `firebase login`,
 `firebase use mihogar-6e6c6`, `npm run deploy:rules`.

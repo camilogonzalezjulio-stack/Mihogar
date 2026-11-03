@@ -17,14 +17,24 @@ async function authorized(req) {
   if (secret && req.headers.authorization === `Bearer ${secret}`) return true;
   const token = req.headers['x-google-token'];
   if (!token) return false;
-  const r = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token));
-  if (!r.ok) return false;
-  const info = await r.json();
-  if (String(info.email_verified) !== 'true' || !info.email) return false;
+  const email = await googleEmail(token);
+  if (!email) return false;
   const allowed = process.env.INGEST_GOOGLE_EMAILS
     ? process.env.INGEST_GOOGLE_EMAILS.split(',').map(sha)
     : ALLOWED_EMAIL_HASHES;
-  return allowed.includes(sha(info.email));
+  return allowed.includes(sha(email));
+}
+
+// Correo dueño del token. El token del Apps Script no siempre trae el correo (solo si el permiso de correo
+// está declarado), así que si falta se pregunta a Gmail, que el script sí tiene permitido.
+async function googleEmail(token) {
+  const info = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token));
+  if (!info.ok) return null;
+  const i = await info.json();
+  if (i.email && String(i.email_verified) === 'true') return i.email;
+  const p = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', { headers: { Authorization: `Bearer ${token}` } });
+  if (!p.ok) return null;
+  return (await p.json()).emailAddress || null;
 }
 
 export default async function handler(req, res) {

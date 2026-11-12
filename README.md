@@ -161,3 +161,14 @@ con ✓ se quita un producto, y al escanear una factura se quitan los que se com
 y se genera una lista estilo recibo para ir marcando en la tienda (las marcas se guardan en el dispositivo). **✅ Terminar compra** quita de Compras lo marcado, muestra el recibo "COMPRA REALIZADA" con lo que quedó pendiente y avisa por Telegram y Discord.
 
 Cuando alguien agrega que falta algo (o pasa un producto a Falta), `api/notice.js` avisa por Telegram y Discord.
+
+## Calendario compartido
+
+La pestaña **Calendario** es de toda la casa (`homes/main/data/events`): cada evento tiene qué es, fecha, hora
+(vacía = todo el día) e ícono. También muestra con 🧾 los días en que vence un recibo sin pagar.
+
+Avisa por Telegram y Discord **1 día, 2 horas y 1 hora antes** (`api/event-reminders.js`, lógica en
+`lib/reminders.mjs`). Lo dispara el script de Gmail en cada revisión (cada 5 minutos), así que el aviso puede
+llegar hasta ~5 minutos tarde. Horas de Colombia; un evento de todo el día se toma a las 8:00 a. m. Si se crea un
+evento cuando ya pasó alguna ventana, solo se manda el aviso más cercano. Si se cambia la fecha o la hora, los
+avisos vuelven a empezar.

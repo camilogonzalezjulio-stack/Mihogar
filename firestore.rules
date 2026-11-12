@@ -10,11 +10,11 @@ service cloud.firestore {
         ];
     }
 
-    // Datos compartidos de la casa: servicios, recibos, compras y secciones de compras.
+    // Datos compartidos de la casa: servicios, recibos, compras, secciones de compras y calendario.
     // `list` va aparte: la app escucha la colección completa y en una consulta no se conoce `doc`.
     match /homes/main/data/{doc} {
       allow list: if permitido();
-      allow get, write: if permitido() && doc in ['services', 'bills', 'shopping', 'shopcats'];
+      allow get, write: if permitido() && doc in ['services', 'bills', 'shopping', 'shopcats', 'events'];
     }
     match /homes/main/receipts/{doc} {
       allow read, write: if permitido();

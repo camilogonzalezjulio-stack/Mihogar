@@ -46,6 +46,7 @@ function traeCuenta(texto, cuenta) {
 function revisarCorreo() {
   // Pedir el correo hace que Google incluya ese dato en el token, y así la app reconoce la cuenta.
   console.log('Cuenta: ' + Session.getEffectiveUser().getEmail());
+  avisarEventos(); // de paso, los recordatorios del calendario (1 día, 2 h y 1 h antes)
   const ok = GmailApp.getUserLabelByName(ETIQUETA_OK) || GmailApp.createLabel(ETIQUETA_OK);
   const revisar = GmailApp.getUserLabelByName(ETIQUETA_REVISAR) || GmailApp.createLabel(ETIQUETA_REVISAR);
   const ignorado = GmailApp.getUserLabelByName(ETIQUETA_IGNORADO) || GmailApp.createLabel(ETIQUETA_IGNORADO);
@@ -81,6 +82,20 @@ function revisarCorreo() {
       // otros errores: se reintenta en la próxima revisión
     });
   });
+}
+
+/** Le pide a la app que mande los recordatorios del calendario que ya tocan. Un fallo aquí no frena el correo. */
+function avisarEventos() {
+  try {
+    const res = UrlFetchApp.fetch(CONFIG.endpoint.replace('ingest-bill', 'event-reminders'), {
+      method: 'post',
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true,
+    });
+    console.log('Calendario', res.getResponseCode(), res.getContentText());
+  } catch (e) {
+    console.log('Calendario: ' + e);
+  }
 }
 
 /** Texto de los PDF adjuntos, extraído por la app (api/pdf-text). '' si no hay PDF o no se pudo leer. */

@@ -8,7 +8,7 @@ import { firebaseConfig, USER_DOMAIN } from './firebase-config.js';
 // Sin configurar Firebase, la app sigue funcionando solo con localStorage.
 const cloud = Boolean(firebaseConfig.apiKey);
 // Lo de la casa se comparte; las finanzas son privadas de cada usuario que inicia sesión.
-const SHARED = ['services', 'bills', 'shopping', 'shopcats'];
+const SHARED = ['services', 'bills', 'shopping', 'shopcats', 'events'];
 const PRIVATE = ['people', 'tx'];
 let db, auth, user = null, unsubs = [];
 const synced = {};
@@ -28,6 +28,7 @@ const defaults = () => ({
   bills: [],     // {id, serviceId, month 'YYYY-MM', amount, due, paid, note}
   shopping: [],  // {id, name, qty, price, category (id de sección), done}
   shopcats: [],  // secciones de Compras {id, name, icon}; se llenan con DEFAULT_SHOPCATS
+  events: [],    // calendario compartido {id, title, date 'YYYY-MM-DD', time 'HH:MM' o '', icon, notes, sent: ['1d','2h','1h']}
   people: [],    // {id, name}
   tx: [],        // {id, personId, type 'in'|'out', amount, category, date, desc}
 });
@@ -117,7 +118,7 @@ if (cloud) {
   });
 }
 
-const ui = { view: 'resumen', month: ym(new Date()), personId: null };
+const ui = { view: 'resumen', month: ym(new Date()), personId: null, cal: ym(new Date()), calDay: null };
 
 /* ---------- Utilidades ---------- */
 function ym(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
@@ -126,7 +127,9 @@ function monthLabel(m) { const [y, mo] = m.split('-').map(Number); return new Da
 const money = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n || 0);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sum = a => a.reduce((t, x) => t + Number(x.amount ?? 0), 0);
-const today = () => new Date().toISOString().slice(0, 10);
+// Fecha local (no UTC: de noche en Colombia toISOString ya da el día siguiente).
+const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const today = () => isoDate(new Date());
 const svc = id => S.services.find(s => s.id === id);
 const $ = s => document.querySelector(s);
 
@@ -401,10 +404,78 @@ function vFinanzas() {
     </div>`;
 }
 
+/* ---------- Calendario compartido ---------- */
+// Los recordatorios (1 día, 2 horas y 1 hora antes) los envía api/event-reminders.js, que el script de Gmail
+// llama cada 5 minutos. Los eventos sin hora se recuerdan como si fueran a las 8:00.
+const byTime = (a, b) => (a.date + (a.time || '00:00')).localeCompare(b.date + (b.time || '00:00'));
+const fmtTime = t => {
+  if (!t) return 'Todo el día';
+  const [h, m] = t.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+};
+const fmtDay = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }); };
+
+function vCalendario() {
+  const [y, m] = ui.cal.split('-').map(Number);
+  const days = new Date(y, m, 0).getDate(), lead = (new Date(y, m - 1, 1).getDay() + 6) % 7; // semana desde lunes
+  const hoy = today(), sel = ui.calDay || hoy;
+  const evOf = d => S.events.filter(e => e.date === d).sort(byTime);
+  const dueOf = d => S.bills.filter(b => !b.paid && b.due === d);
+  const cells = [];
+  for (let k = 0; k < lead; k++) cells.push('<div class="cal-cell cal-out"></div>');
+  for (let d = 1; d <= days; d++) {
+    const iso = `${ui.cal}-${String(d).padStart(2, '0')}`, ev = evOf(iso), due = dueOf(iso);
+    cells.push(`<button class="cal-cell${iso === hoy ? ' cal-today' : ''}${iso === sel ? ' cal-sel' : ''}" data-act="cal-day" data-id="${iso}">
+      <span class="cal-num">${d}</span>
+      ${ev.slice(0, 2).map(e => `<span class="cal-ev">${esc(e.icon || '📌')} ${esc(e.title)}</span>`).join('')}
+      ${ev.length > 2 ? `<span class="cal-more">+${ev.length - 2}</span>` : ''}
+      ${due.length ? `<span class="cal-due" title="Vence un recibo">🧾 ${due.length}</span>` : ''}</button>`);
+  }
+  const selEv = evOf(sel), selDue = dueOf(sel);
+  const upcoming = S.events.filter(e => e.date >= hoy).sort(byTime).slice(0, 5);
+  const evLine = (e, withDay) => `<div class="item"><span class="cat-icon sm-icon">${esc(e.icon || '📌')}</span>
+      <span class="grow"><b>${esc(e.title)}</b><br><span class="muted">${withDay ? esc(fmtDay(e.date)) + ' · ' : ''}${fmtTime(e.time)}${e.notes ? ' · ' + esc(e.notes) : ''}</span></span>
+      <button class="icon" data-act="ev-edit" data-id="${e.id}">✎</button></div>`;
+  return `<div class="toolbar">
+      <button class="ghost" data-act="cal-prev">◀</button><span class="month">${monthLabel(ui.cal)}</span><button class="ghost" data-act="cal-next">▶</button>
+      <button class="ghost sm" data-act="cal-today">Hoy</button></div>
+    <div class="grid two">
+      <div class="card"><div class="cal-grid">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => `<div class="cal-head">${d}</div>`).join('')}${cells.join('')}</div></div>
+      <div class="stack">
+        <div class="card"><div class="row between"><h3 style="text-transform:capitalize">${esc(fmtDay(sel))}</h3>
+          <button class="btn sm" data-act="ev-add" data-id="${sel}">+ Evento</button></div>
+          ${selEv.map(e => evLine(e)).join('')}
+          ${selDue.map(b => `<div class="item"><span class="cat-icon sm-icon">🧾</span><span class="grow"><b>Vence ${esc(svc(b.serviceId)?.name || 'recibo')}</b>
+            <br><span class="muted">${money(b.amount)} · pendiente</span></span></div>`).join('')}
+          ${selEv.length || selDue.length ? '' : '<div class="empty">Nada este día</div>'}</div>
+        <div class="card"><h3 style="margin-bottom:6px">Próximos</h3>
+          ${upcoming.map(e => evLine(e, true)).join('') || '<div class="muted">No hay eventos próximos</div>'}
+          <div class="muted" style="margin-top:10px">🔔 Se avisa en Telegram y Discord 1 día, 2 horas y 1 hora antes.</div></div>
+      </div>
+    </div>`;
+}
+
+function evForm(e, isNew) {
+  openForm(isNew ? 'Nuevo evento' : 'Editar evento', [
+    { name: 'title', label: 'Qué es', value: e.title },
+    { name: 'date', label: 'Fecha', type: 'date', value: e.date },
+    { name: 'time', label: 'Hora (déjala vacía si es todo el día)', type: 'time', value: e.time || '', required: false },
+    { name: 'icon', label: 'Ícono (un emoji, ej. 🎂 🏥 🧹 💳)', value: e.icon || '📌', required: false },
+    { name: 'notes', label: 'Notas', value: e.notes || '', required: false },
+  ], v => {
+    // Si cambia la fecha o la hora, los recordatorios se vuelven a enviar para el nuevo momento.
+    const moved = v.date !== e.date || (v.time || '') !== (e.time || '');
+    Object.assign(e, v, { icon: v.icon || '📌', sent: moved ? [] : (e.sent || []) });
+    if (isNew) S.events.push({ id: uid(), ...e });
+    ui.calDay = e.date; ui.cal = e.date.slice(0, 7);
+    save();
+  }, isNew ? null : () => { S.events = S.events.filter(x => x.id !== e.id); save(); });
+}
+
 const FIXED_LABEL = 'Valor fijo mensual (déjalo vacío si cambia cada mes)';
 const ACCOUNT_LABEL = 'Número de cuenta (NIC, póliza, contrato o ID)';
 
-const views = { resumen: vResumen, servicios: vServicios, compras: vCompras, finanzas: vFinanzas };
+const views = { resumen: vResumen, servicios: vServicios, compras: vCompras, calendario: vCalendario, finanzas: vFinanzas };
 
 function render() {
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === ui.view));
@@ -470,6 +541,12 @@ const A = {
   'buy-add'(cat) { buyForm({ name: '', qty: 1, price: '', category: cat || S.shopcats[0]?.id }, true); },
   'buy-edit'(id) { buyForm(find(S.shopping, id), false); },
   'buy-done'(id) { S.shopping = S.shopping.filter(i => i.id !== id); save(); },
+  'cal-prev'() { ui.cal = shiftMonth(ui.cal, -1); render(); },
+  'cal-next'() { ui.cal = shiftMonth(ui.cal, 1); render(); },
+  'cal-today'() { ui.cal = ym(new Date()); ui.calDay = today(); render(); },
+  'cal-day'(d) { ui.calDay = d; render(); },
+  'ev-add'(d) { evForm({ title: '', date: d || today(), time: '', icon: '📌', notes: '' }, true); },
+  'ev-edit'(id) { evForm(find(S.events, id), false); },
   'cat-add'() { catForm(null); },
   'cat-edit'(id) { catForm(catById(id)); },
   'shop-list'() { shopListPicker(); },

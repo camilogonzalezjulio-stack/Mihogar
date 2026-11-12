@@ -11,6 +11,12 @@ const money = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency:
 const monthName = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }); };
 
 export function arrivalMessage({ action, service, bill }, p) {
+  // Llegó una factura para un mes que ya está pagado con otro valor: no se toca, pero se avisa para revisarla.
+  if (action === 'ya-pagado') return [
+    `⚠️ Llegó una factura de ${PROVIDERS[p.provider].label} por ${money(p.amount)} para ${service.icon || '📌'} ${service.name} (${monthName(p.month)})`,
+    `Ese mes ya está marcado como pagado por ${money(bill.amount)}. Revísala en MiHogar por si es otra factura.`,
+    process.env.APP_URL || '',
+  ].filter(Boolean).join('\n');
   return [
     `📩 ${action === 'actualizado' ? 'Se actualizó la factura' : 'Llegó la factura'} de ${PROVIDERS[p.provider].label}`,
     `${service.icon || '📌'} ${service.name} (${monthName(bill.month)}): ${money(bill.amount)}`,
@@ -45,8 +51,8 @@ export default async function handler(req, res) {
     });
     // Aviso inmediato solo cuando la factura es nueva o cambió el valor (no en duplicados ni recibos ya pagados).
     let avisado = false;
-    if (r.changed) {
-      try { avisado = (await send(arrivalMessage(r, p))).sent.length > 0; }
+    if (r.changed || r.conflict) {
+      try { avisado = (await send(arrivalMessage(r, { ...p, amount }))).sent.length > 0; }
       catch (e) { console.error('Aviso de factura:', e.message); }
     }
     res.status(r.action === 'sin-servicio' ? 422 : 200)

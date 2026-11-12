@@ -114,8 +114,11 @@ function reintentarRevisar() {
  */
 function leerPeriodo(texto, fechaCorreo) {
   const m = texto.match(/periodo\s+facturado[^A-Za-zÁÉÍÓÚáéíóú]{0,20}([a-záéíóú]+)[\s\-\/]+(\d{4})/i)
-    || texto.match(/(?:correspondiente\s+al\s+mes\s+de|factura\s+del\s+mes\s+de)\s+([a-záéíóú]+)(?:\s+(?:de\s+)?(\d{4}))?/i);
-  const mes = m && MESES[m[1].toLowerCase()];
+    || texto.match(/(?:correspondiente\s+al\s+mes\s+de|factura\s+del\s+mes\s+de)\s+([a-záéíóú]+)(?:\s+(?:de\s+)?(\d{4}))?/i)
+    // Claro: "MES" en una línea y "Noviembre" o "Nov." en la siguiente.
+    || texto.match(/^\s*MES\s*[:\-]?\s*\n+\s*([a-záéíóú]{3,})\.?\s*$/im);
+  const nombre = m && m[1].toLowerCase();
+  const mes = nombre && (MESES[nombre] || MES_CORTO[nombre.slice(0, 3)]);
   if (!mes) return '';
   const yCorreo = Number(Utilities.formatDate(fechaCorreo, 'America/Bogota', 'yyyy'));
   const mCorreo = Number(Utilities.formatDate(fechaCorreo, 'America/Bogota', 'M'));
@@ -170,7 +173,8 @@ function leerVencimiento(texto) {
   if (m && MESES[m[2].toLowerCase()]) return armarFecha(m[3], MESES[m[2].toLowerCase()], m[1]);
   // "Fecha de vencimiento Oct 20-26" (mes abreviado, día y año de 2 dígitos)
   // Solo mes de 3 letras: así no se confunde con la fecha de emisión ("Octubre 7-26") cuando el PDF las separa.
-  m = texto.match(/(?:fecha\s+de\s+vencimiento|vence|pague\s+hasta)[^A-Za-z\d]{0,25}([a-z]{3})\.?\s+(\d{1,2})[\-\/\s]+(\d{2,4})/i);
+  // También "FECHA DE PAGO Dic 01/26" de Claro.
+  m = texto.match(/(?:fecha\s+de\s+vencimiento|fecha\s+de\s+pago|vence|pague\s+hasta)[^A-Za-z\d]{0,25}([a-z]{3})\.?\s+(\d{1,2})[\-\/\s]+(\d{2,4})/i);
   if (m && MES_CORTO[m[1].toLowerCase()]) return armarFecha(m[3], MES_CORTO[m[1].toLowerCase()], m[2]);
   return '';
 }

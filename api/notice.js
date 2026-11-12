@@ -1,10 +1,12 @@
 // Avisos por Telegram y Discord que dispara la app. POST con `Authorization: Bearer <ID token de Firebase>`:
 //   { type: 'paid', billId }    → "✅ Camilo ya pagó el servicio de 🌐 Internet (octubre de 2026): $ 44.950"
 //   { type: 'missing', itemId } → "🛒 Sofia agregó que falta: Arroz ×2 (🍽️ Comida)"
+//   { type: 'event', eventId }  → "📆 Sofia agregó al calendario: 🎂 Cumpleaños …"
 //   { type: 'purchase', items: [{ name, qty }] } → "🛍️ Camilo hizo la compra (3 productos): …"
 // El mensaje se arma con los datos de Firestore (no con lo que mande el navegador).
 import { auth, db } from '../lib/admin.mjs';
 import { send } from '../lib/notify.mjs';
+import { eventDetails } from '../lib/reminders.mjs';
 
 const USER_DOMAIN = process.env.VITE_USER_DOMAIN || 'mihogar.test';
 const money = n => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n || 0);
@@ -44,6 +46,14 @@ async function missingMessage(who, itemId) {
     `En total faltan ${pending} ${pending === 1 ? 'producto' : 'productos'} en la casa.`].join('\n')];
 }
 
+async function eventMessage(who, eventId) {
+  const d = await readUntil(['events'], x => x.events.some(e => e.id === eventId));
+  const e = d.events.find(x => x.id === eventId);
+  if (!e) return [404, 'Evento no encontrado'];
+  return [200, [`📆 ${who} agregó al calendario: ${e.icon || '📌'} ${e.title}`, ...eventDetails(e),
+    'Se avisará 1 día, 2 horas y 1 hora antes.'].join('\n')];
+}
+
 // Los productos comprados ya se borraron de Compras, así que la lista viene de la app (solo nombres y cantidades).
 async function purchaseMessage(who, items) {
   const list = (Array.isArray(items) ? items : []).slice(0, 80)
@@ -73,6 +83,7 @@ export default async function handler(req, res) {
     const who = user.email.split('@')[0].replace(/^./, c => c.toUpperCase());
     const [code, text] = body.type === 'paid' && body.billId ? await paidMessage(who, body.billId)
       : body.type === 'missing' && body.itemId ? await missingMessage(who, body.itemId)
+        : body.type === 'event' && body.eventId ? await eventMessage(who, body.eventId)
         : body.type === 'purchase' ? await purchaseMessage(who, body.items)
           : [400, 'Tipo de aviso inválido'];
     if (code !== 200) return res.status(code).json({ error: text });

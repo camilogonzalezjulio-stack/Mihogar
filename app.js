@@ -466,9 +466,11 @@ function evForm(e, isNew) {
     // Si cambia la fecha o la hora, los recordatorios se vuelven a enviar para el nuevo momento.
     const moved = v.date !== e.date || (v.time || '') !== (e.time || '');
     Object.assign(e, v, { icon: v.icon || '📌', sent: moved ? [] : (e.sent || []) });
-    if (isNew) S.events.push({ id: uid(), ...e });
+    const id = isNew ? uid() : e.id;
+    if (isNew) S.events.push({ id, ...e });
     ui.calDay = e.date; ui.cal = e.date.slice(0, 7);
     save();
+    if (isNew) notify({ type: 'event', eventId: id });
   }, isNew ? null : () => { S.events = S.events.filter(x => x.id !== e.id); save(); });
 }
 

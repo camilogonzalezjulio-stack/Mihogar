@@ -167,7 +167,8 @@ Cuando alguien agrega que falta algo (o pasa un producto a Falta), `api/notice.j
 La pestaña **Calendario** es de toda la casa (`homes/main/data/events`): cada evento tiene qué es, fecha, hora
 (vacía = todo el día) e ícono. También muestra con 🧾 los días en que vence un recibo sin pagar.
 
-Avisa por Telegram y Discord **1 día, 2 horas y 1 hora antes** (`api/event-reminders.js`, lógica en
+Al crear un evento se avisa enseguida («📆 Sofia agregó al calendario: …»), y luego
+se recuerda por Telegram y Discord **1 día, 2 horas y 1 hora antes** (`api/event-reminders.js`, lógica en
 `lib/reminders.mjs`). Lo dispara el script de Gmail en cada revisión (cada 5 minutos), así que el aviso puede
 llegar hasta ~5 minutos tarde. Horas de Colombia; un evento de todo el día se toma a las 8:00 a. m. Si se crea un
 evento cuando ya pasó alguna ventana, solo se manda el aviso más cercano. Si se cambia la fecha o la hora, los
